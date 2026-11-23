@@ -15,3 +15,6 @@ export const OSRM_URL = 'https://router.project-osrm.org'
 
 /** Used as `${NOMINATIM_URL}/search` and `${NOMINATIM_URL}/reverse`. */
 export const NOMINATIM_URL = 'https://nominatim.openstreetmap.org'
+
+/** The bundled sample trip (a static file in `public/samples/`, so it also opens offline once cached). */
+export const SAMPLE_TRIP_URL = `${import.meta.env.BASE_URL}samples/hamburg-fjords.trip.json`

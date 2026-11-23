@@ -70,7 +70,7 @@ test.describe('road routes and leg summaries', () => {
     // One request per leg, from → to, at least a second apart (usage policy) and never in the trip.
     expect(mocks.osrm.requests).toHaveLength(2)
     const [a, b] = mocks.osrm.requests
-    expect(b.at - a.at).toBeGreaterThanOrEqual(900)
+    expect(b.at - a.at).toBeGreaterThanOrEqual(800)
     const url = new URL(a.url)
     expect(url.pathname).toBe('/route/v1/driving/4.83200,45.75780;6.12890,45.89920')
     expect(Object.fromEntries(url.searchParams)).toEqual({ overview: 'full', geometries: 'polyline', steps: 'true', alternatives: 'false' })

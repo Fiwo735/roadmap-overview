@@ -1,4 +1,5 @@
 import { toast } from './components/toast'
+import { openTripFromAddress } from './features/io/startup'
 import { getMap } from './features/map/mapInstance'
 import { initTheme } from './features/theme/theme'
 import { restoreSavedTrip, startAutosave } from './store/persistence'
@@ -25,7 +26,7 @@ function keepSelectionValid(): void {
   })
 }
 
-/** Everything that must be in place before the first render: theme, saved trip, autosave, debug hook. */
+/** Everything that must be in place before the first render: theme, saved trip, autosave, shared trip, debug hook. */
 export function bootstrap(): void {
   initTheme()
 
@@ -34,6 +35,8 @@ export function bootstrap(): void {
   }
   startAutosave()
   keepSelectionValid()
+  // After autosave started, so that a trip opened from the address is saved as the current one.
+  openTripFromAddress()
 
   if (import.meta.env.DEV) {
     window.__ROADMAP__ = { trip: useTripStore, ui: useUiStore, routes: useRouteStore, getMap }

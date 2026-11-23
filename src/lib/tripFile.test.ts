@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LegRoute, Trip } from '../types/trip'
+import { pathLengthM } from './geo'
 import { encodePolyline } from './polyline'
 import { legRouteKey } from './routeKey'
 import { collectLegRoutes, parseTripFile, serializeTripFile } from './tripFile'
@@ -27,7 +28,9 @@ function route(key: string, trip: Trip = sampleTrip(), legIndex = 0): LegRoute {
   const a = trip.places[legIndex]
   const b = trip.places[legIndex + 1]
   const mid = { lat: (a.lat + b.lat) / 2 + 0.1, lng: (a.lng + b.lng) / 2 }
-  return { key, geometry: encodePolyline([a, mid, b]), distanceM: 1000, durationS: 60, source: 'osrm' }
+  // Roads are a little longer than the line drawn for them.
+  const distanceM = Math.round(pathLengthM([a, mid, b]) * 1.05)
+  return { key, geometry: encodePolyline([a, mid, b]), distanceM, durationS: 60, source: 'osrm' }
 }
 
 function keyOf(trip: Trip, legIndex: number): string {
@@ -377,5 +380,85 @@ describe('collectLegRoutes', () => {
     const k1 = keyOf(trip, 0)
     const collected = collectLegRoutes(trip, { [k1]: route(k1), other: route('other') })
     expect(collected).toEqual({ l1: route(k1) })
+  })
+})
+
+describe('parseTripFile limits', () => {
+  const manyPlaces = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `Stop ${i}`, lat: 40 + (i % 20), lng: 5 + (i % 30), day: i }))
+
+  it('refuses a trip with more than 500 places, saying how many it has', () => {
+    const tooMany = { ...fileFor(sampleTrip()), trip: { id: 't', title: 'Huge', places: manyPlaces(501), legs: [] } }
+    expect(parseTripFile(tooMany)).toEqual({
+      ok: false,
+      error: 'This trip has 501 places; Roadmap Overview opens at most 500.',
+    })
+  })
+
+  it('still opens exactly 500', () => {
+    const file = { ...fileFor(sampleTrip()), trip: { id: 't', title: 'Big', places: manyPlaces(500), legs: [] } }
+    const parsed = parseTripFile(file)
+    expect(parsed.ok && parsed.file.trip.places).toHaveLength(500)
+    expect(parsed.ok && parsed.file.trip.legs).toHaveLength(499)
+  })
+
+  it('keeps the first 50 via points of a leg and says the rest were dropped', () => {
+    const trip = sampleTrip()
+    const via = Array.from({ length: 60 }, (_, i) => ({ lat: 52 + i / 100, lng: 14 }))
+    trip.legs[0].via = via
+    const parsed = parseTripFile(fileFor(trip))
+    expect(parsed.ok && parsed.file.trip.legs[0].via).toEqual(via.slice(0, 50))
+    expect(parsed.ok && parsed.warnings).toEqual(['Leg 1: only the first 50 via points were kept.'])
+  })
+
+  it('counts only valid via points towards the 50', () => {
+    const trip = sampleTrip()
+    const raw = fileFor(trip)
+    const good = Array.from({ length: 50 }, (_, i) => ({ lat: 52 + i / 100, lng: 14 }))
+    raw.trip.legs[0].via = [{ lat: 'x', lng: 1 }, ...good]
+    const parsed = parseTripFile(raw)
+    expect(parsed.ok && parsed.file.trip.legs[0].via).toEqual(good)
+    expect(parsed.ok && parsed.warnings).toEqual(['Leg 1: an invalid via point was dropped.'])
+  })
+})
+
+describe('parseTripFile: a route\'s distance must fit its geometry', () => {
+  /** The first leg's route with its distance replaced, parsed through JSON like a real file. */
+  function parseWithDistance(distanceM: number) {
+    const trip = sampleTrip()
+    const real = route(keyOf(trip, 0), trip)
+    return parseTripFile(fileFor(trip, { l1: { ...real, distanceM } })) as Extract<ReturnType<typeof parseTripFile>, { ok: true }>
+  }
+
+  it('accepts the distance of the geometry, and anything between half and three times it', () => {
+    const trip = sampleTrip()
+    const real = route(keyOf(trip, 0), trip)
+    const line = pathLengthM([trip.places[0], { lat: 52.52 / 2 + 50.0755 / 2 + 0.1, lng: (13.405 + 14.4378) / 2 }, trip.places[1]])
+    for (const distanceM of [real.distanceM, line * 0.51, line * 2.9]) {
+      const parsed = parseWithDistance(distanceM)
+      expect(parsed.file.routes?.l1?.distanceM).toBe(distanceM)
+      expect(parsed.warnings).toEqual([])
+    }
+  })
+
+  it('drops a forged distance, however it is wrong, and asks for the route again', () => {
+    const trip = sampleTrip()
+    const line = route(keyOf(trip, 0), trip).distanceM
+    for (const distanceM of [5, 0, line * 0.3, line * 3.5, 9_000_000_000]) {
+      const parsed = parseWithDistance(distanceM)
+      expect(parsed.file.routes).toEqual({})
+      expect(parsed.warnings).toEqual(['Leg 1: the saved route has a distance that does not match its geometry; it will be calculated again.'])
+    }
+  })
+
+  it('lets a geometry that does not move claim only a short distance', () => {
+    const trip = sampleTrip()
+    trip.places[1] = { ...trip.places[1], lat: trip.places[0].lat, lng: trip.places[0].lng }
+    const key = keyOf(trip, 0)
+    const there = { lat: trip.places[0].lat, lng: trip.places[0].lng }
+    const base = { key, geometry: encodePolyline([there, there]), durationS: 1, source: 'osrm' as const }
+    expect(parseTripFile(fileFor(trip, { l1: { ...base, distanceM: 0 } }))).toMatchObject({ ok: true, file: { routes: { l1: {} } } })
+    const forged = parseTripFile(fileFor(trip, { l1: { ...base, distanceM: 50_000 } }))
+    expect(forged.ok && forged.file.routes).toEqual({})
   })
 })

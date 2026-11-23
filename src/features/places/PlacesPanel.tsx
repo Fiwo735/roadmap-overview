@@ -12,10 +12,12 @@ import {
   type Modifier,
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { MapPinned } from 'lucide-react'
+import { MapPinned, Sparkles } from 'lucide-react'
+import { Button } from '../../components/Button'
 import { effectiveDays } from '../../lib/trip'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
+import { loadSampleTrip } from '../io/importTrip'
 import { PlaceRow } from './PlaceRow'
 import { PlaceSearch } from './PlaceSearch'
 import { displayName } from './names'
@@ -96,6 +98,9 @@ export function PlacesPanel() {
           <p className="empty-state__text">
             Search for a place below to add your first stop, or right-click the map and choose “Add place here”.
           </p>
+          <Button variant="secondary" icon={<Sparkles size={16} />} onClick={() => void loadSampleTrip()} data-testid="load-sample">
+            Load sample trip
+          </Button>
         </div>
       ) : (
         <DndContext

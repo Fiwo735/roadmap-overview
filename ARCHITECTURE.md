@@ -19,6 +19,7 @@ geocoding are called directly from the client.
 | Lists | `@dnd-kit/core` + `@dnd-kit/sortable` |
 | Geometry | `@mapbox/polyline` (precision 5) |
 | Countries | `world-atlas` 50 m boundaries + `topojson-client` (own lazy chunk), `flag-icons` SVGs |
+| Share links | `lz-string` (`compressToEncodedURIComponent`) |
 | Tests | Vitest (pure logic), Playwright 1.63 (`@playwright/test`, pinned to the preinstalled browsers) |
 
 ## Screen layout
@@ -54,8 +55,10 @@ src/
                              requestQueue (politeness queue), lru, nearest (point-to-path projection,
                              insert index, via-point index), simplify (Douglas–Peucker),
                              manualRoute (routes that need no router), greatCircle (flight arcs),
-                             routeSpans (ferry stretches from OSRM steps), legModes / legBadges (legend and badge placement)
-  services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs), nominatim.ts, osrm.ts
+                             routeSpans (ferry stretches from OSRM steps), legModes / legBadges (legend and badge placement),
+                             shareLink (`#trip=` links), tripFileIo (file names, pretty JSON, text → TripFile)
+  services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs, sample trip), nominatim.ts, osrm.ts,
+                             tripSource.ts (trip files from `?src=` and the sample)
   store/                     tripStore (undoable intent), uiStore, routeStore, persistence
   components/                shared UI primitives: Button, IconButton (+Tooltip), Menu, Dialog,
                              ContextMenu (a Menu opened at a point), Toast (+ the `toast` API in
@@ -72,7 +75,8 @@ src/
                              RouteLayer + reshape (lines, via points, Google-Maps-style reshaping), MapTools
     stats/                   title/statistics card (StatsOverlay → TripCard | TripPill), computeStats,
                              countries (+ countryIndex, worldIndex, countryData), flags, dateRange, samplePath
-    io/ ride/ export-image/  slot placeholders until their feature lands
+    io/                      FileMenu (top bar), import/export actions, drop overlay, start-up links (F5)
+    ride/ export-image/      slot placeholders until their feature lands
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
@@ -131,7 +135,9 @@ See `src/types/trip.ts`. Key rules:
   (`features/routing/legRoutes.ts`, see F2).
 - `store/persistence.ts`: debounced autosave of a `TripFile` (trip + routes of current legs) to
   `localStorage["roadmap-overview:v1:current"]`, restored on start. Theme lives in
-  `localStorage["roadmap-overview:theme"]`.
+  `localStorage["roadmap-overview:theme"]`. The trips that something replaced (a link, a file, the
+  sample, "New trip") go to a ring of up to five in `localStorage["roadmap-overview:v1:recent"]`
+  (`store/recentTrips.ts`, F5).
 - **Debug hook.** In dev builds `window.__ROADMAP__` exposes the stores (`trip`, `ui`, `routes`,
   each a Zustand store; `trip.temporal` is the undo history) and `getMap()` (the Leaflet map) so
   Playwright and humans can inspect and drive state programmatically. Stripped from production.
@@ -144,6 +150,7 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 | --- | --- | --- |
 | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution (map and exported image); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. |
 | `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=true&alternatives=false` (the steps only tell where a route takes a ferry, see F3); one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; geometry simplified (12 m) before caching. |
+| A trip file URL the user gives as `?src=…` (and the bundled `samples/…` on this site) | Opening a trip someone published, e.g. a gist | GET only (`services/tripSource.ts`), http(s) only, no credentials or referrer, 20 s timeout, 20 MB cap; the other server has to allow cross-origin reads (CORS). |
 | `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
 
 Base URLs are constants in `src/services/config.ts` so they can be pointed elsewhere.
@@ -600,3 +607,114 @@ Each feature appends a short entry here: what it added, where it lives, anything
   it; no per-day breakdown; the date field is the browser's native one (looks different per browser);
   a place picked by search is flown to (`flyToPoint`) without regard for the card, and the fit is not
   redone when the card is folded or unfolded afterwards.
+
+### F5 — save, load and share trips
+
+- **File menu** (`features/io/FileMenu.tsx`, top bar): New trip (asks first only when the trip has places;
+  `newTrip()` is one undoable step, the toast offers Undo), Open trip file… (Ctrl/Cmd+O), Save as JSON
+  (Ctrl/Cmd+S), Copy share link, Load sample trip and Recent trips… (disabled while the list is empty).
+  Save and Copy are disabled for a trip without places. The component also owns what has no other home:
+  the shortcuts (`fileShortcuts.ts`; the browser's own save/open are always suppressed, the action is
+  skipped while a modal dialog is open, and a field being edited, e.g. the title, is blurred first so what
+  was typed is saved), `ConfirmHost` (the dialog behind `askToConfirm()` in `confirm.ts`, callable from
+  non-React code; New trip uses it too), the Recent trips dialog and the drop overlay. On phones the label is
+  hidden (icon only), and **toasts sit at the bottom** below 768 px (`Toast.css`), because the top bar's
+  dropdowns open where they used to be.
+- **Files** (`lib/tripFileIo.ts`): `tripFileName(title)` = `<slug>.trip.json` (`slugify` keeps letters
+  of any script, drops accents, avoids Windows' reserved names, `trip` when nothing is left),
+  `stringifyTripFile` (2-space JSON, trailing newline), `parseTripJson(text)` (BOM, empty file, invalid
+  JSON → `{ ok: false, error }`, then `parseTripFile`; a newer `version` says "saved by a newer version").
+  `features/io/exportTrip.ts`: `currentTripFile(withRoutes)` (= `collectLegRoutes` + `serializeTripFile`),
+  `saveTripFile()` (Blob + `a[download]`), `copyShareLink()` (Clipboard API, `execCommand` fallback).
+- **Importing** (`features/io/importTrip.ts`): `installTrip(file)` is the one way to put a parsed file
+  into the stores — it seeds the route store with the file's routes *before* `replaceTrip` (so the route
+  manager finds every key and sends no request), is one undo step, and fits the map (waits for the map
+  if it is not mounted yet). `openTripText(text, name)` serves picked/dropped files and the sample: error
+  toast with the reason (the trip is left alone) or "Opened “title” (n places)" with **Undo**, plus the
+  first repairs `parseTripFile` made. Picking uses one lazily created hidden `<input type=file>`
+  (`filePicker.ts`).
+- **Recent trips** (`lib/recentTrips.ts` pure, `store/recentTrips.ts` storage): *every* operation that
+  replaces a trip with places first calls `keepOpenTrip(incoming)` — open file, drop, sample, link,
+  `?src=`, "New trip" and restoring a recent trip itself — which pushes the open trip (with its cached
+  routes) to the front of the ring: newest first, at most 5 (`MAX_RECENT_TRIPS`), de-duplicated by a
+  content fingerprint (`tripFingerprint`: key-order independent hash of the trip), nothing pushed for an
+  empty trip or when the same trip comes back. Entries are `{ id, savedAt, file }`, each re-validated
+  through `parseTripFile` on every read (invalid ones are skipped). Writing tries everything with routes,
+  then without any routes, then drops the oldest entries one by one; if even the newest does not fit,
+  `keepOpenTrip` says `'failed'` and the stored list stays as it was. `restoreRecentTrip(id?)` (newest
+  when no id) is itself an open, so the replaced trip enters the ring and the restored entry leaves it.
+  The File menu's **Recent trips…** dialog lists title, places and "saved 5 min ago" with Restore and
+  Forget; `useRecentStore` holds the summaries (re-read on mount, on opening the dialog and after every
+  write) so the menu never parses the ring while rendering.
+- **When a trip cannot be kept** (`'failed'`): user-initiated opens (file, drop, sample, restore) ask
+  first (`askToConfirm`, Cancel focused); a link or `?src=` does not replace anything by itself but shows
+  a toast "…no room to keep a copy of your open trip" whose action "Open linked trip anyway" does it.
+  A `?src=` file that arrives after the user already changed the trip in this page load (the trip object
+  differs from the one at the time of the request) is only offered ("Open the linked trip …?" with an
+  action), never applied.
+- **Share links** (`lib/shareLink.ts`): `#trip=` + `compressToEncodedURIComponent` of the TripFile
+  **without routes**; `buildShareUrl` keeps origin + path and drops query and old hash. The 12-stop sample
+  is 3 kB (3 021 characters); above 8 000 characters the toast says so and points to the JSON file.
+  `decodeShareHash` is defensive and hands the JSON to `parseTripFile`: a payload over 100 000
+  characters is refused before unpacking, and an unpacking that throws, returns nothing, is not JSON or
+  yields more than 5 MB counts as a damaged link (never an exception). `copyShareLink` refuses to make a
+  link the app itself would not open (`isOpenableShareLink`). The receiving page derives the routes again
+  (about a second per leg).
+- **Opening from the address** (`features/io/startup.ts`, called by `bootstrap()` *after* autosave started so
+  the opened trip becomes the saved one): `#trip=` is read synchronously (the map's first view already fits
+  it), the hash is removed with `replaceState`, the history is cleared. `hashchange` handles a link pasted
+  into an open page (undoable, history kept). `?src=<url>` (absolute, or relative to the page) is fetched
+  by `services/tripSource.ts` (http(s) only, no credentials/referrer, 20 s timeout, 20 MB cap, errors
+  written for the user), `src` is removed from the address, a "Loading…" toast shows meanwhile. Both go
+  through `openLinkedTrip`: the open trip goes to the recent trips first (see above), and the toast offers
+  **Restore previous trip** (20 s), which restores the *newest* entry.
+- **Drag and drop** (`DropOverlay.tsx`): window-level listeners, only for drags carrying `Files`
+  (dragenter/leave are counted; text and link drags do nothing). A themed "Drop to open trip" overlay
+  (`pointer-events: none`, above the top bar, below toasts); a drop opens the first `.json`/JSON-typed file
+  or the only file whatever it is (so a wrong file gets a reason), and the browser's default of
+  navigating to a dropped file is always prevented. Ignored while a modal dialog is open.
+- **Sample trip** (`public/samples/hamburg-fjords.trip.json`, URL in `services/config.ts`
+  `SAMPLE_TRIP_URL`): Hamburg → Aarhus → Hirtshals → **ferry** → Kristiansand → Preikestolen → Odda →
+  Flåm → Geiranger → Lillehammer → Oslo → Gothenburg → Malmö; 12 places on days 0–14 with notes, a
+  `startDate`, 10 routed legs with real OSRM geometry (38 kB; Preikestolen → Odda contains an automatic 3 km
+  ferry span) and the Hirtshals → Kristiansand crossing as an explicit Ferry leg (195 min, labelled),
+  because the demo server drives round instead. It was made by driving the app against the real servers
+  (places added through the store, routes awaited, then File → Save as JSON); to change it, do the same.
+  `features/io/sample.test.ts` guards it (parses without warnings, a route for every routed leg, one ferry).
+  The places panel's empty state has a "Load sample trip" button (`data-testid="load-sample"`).
+- **Contract / shared files**: `types/trip.ts` unchanged. New dependency: `lz-string` 1.5 (CommonJS: Vite
+  and Vitest interop is fine, Playwright specs load it with `createRequire`). Additive edits to
+  `bootstrap.ts`, `store/persistence.ts` (only `getStorage` is exported now), `PlacesPanel.tsx`
+  (empty-state button), `Toast.css` (phones), `e2e/fixtures.ts` (`STORAGE_KEYS.recent`).
+  **`parseTripFile` limits** (`lib/tripFile.ts`, they also apply to autosave and the recent trips): more
+  than `MAX_PLACES` = 500 places is refused ("This trip has 501 places; Roadmap Overview opens at most
+  500."), via points beyond `MAX_VIA_PER_LEG` = 50 per leg are dropped with a warning, and a saved route
+  whose `distanceM` is outside 0.5×–3× the length of its own geometry (a geometry that does not move may
+  claim at most 1 km) is dropped with a warning and routed again. Test fixtures with routes therefore
+  need a realistic `distanceM`.
+- **Tests**: Vitest for share-link encode/decode (round trip, no routes, damaged/cut-off/oversized, URL
+  building, long-link threshold), slugify/file names/`parseTripJson`/version errors, `fetchTripText` and
+  address resolution (stubbed fetch, fake timers), `installTrip` (route seeding by key *before* the trip
+  changes, one undo step), `openTripText`, `keepOpenTrip`, `openLinkedTrip` (two links in a row keep the
+  user's own trip, restore swaps, quota failures ask), the recent-trips ring (dedupe, cap, per-entry
+  validation, the three quota fallbacks) and its pure helpers, the 500-place / 50-via / forged-distance
+  limits, and the sample file. `e2e/io.spec.ts` (mocked services): save (name, pretty JSON, routes keyed by leg id), Ctrl+S
+  with an uncommitted title, Ctrl+O, empty trip, open-without-OSRM-requests + Undo, a file without routes
+  being routed, four kinds of unusable file, New trip (confirm, cancel, undo), share-link round trip in a
+  fresh page (routes re-derived, hash removed, reload keeps the trip), kept/restored previous trip, two
+  links in a row then restoring the user's own trip from Recent trips (the replaced trip stays in the
+  ring), every way of replacing a trip landing in the list and the dialog's Restore/Forget, damaged
+  entries ignored, a full quota (link: toast with "Open linked trip anyway"; file: confirm, Cancel and
+  Replace), same-trip-not-kept, pasted link, damaged link, very long link, `?src=` (success, relative,
+  404, wrong file, unreachable, bad scheme, arriving after the user edited), drag and drop (overlay, nesting, text drags, default prevented, wrong
+  files), the sample (no OSRM requests, ferry leg, map fits, Undo, missing file) and the phone top bar.
+  `?src=` hosts are mocked with `page.route` (page routes win over the fixture's blocking route).
+- **Known gaps**: every Save downloads a new file (no File System Access API "save in place"); Save does
+  not wait for routes that are still loading (they are simply missing from the file and derived again on
+  open); a link or `?src=` replaces the open trip without asking (recent trips + toast instead); the
+  ring holds five trips; a trip with more than 500 places (only reachable by adding them by hand) would
+  be refused on reload and end up in the `…:corrupt` copy; lz-string has no output limit, so a hostile
+  link within the 100 000-character cap can still make the tab unpack for a long time before the
+  5 MB check; a server that refuses cross-origin reads looks like an unreachable one; drops are covered
+  with synthetic drag events, not a real OS file drag; the sample is a static file, not bundled, so it
+  needs the network (or a cached copy) once.

@@ -65,3 +65,23 @@
 .toast__action:hover {
   background: var(--accent-soft);
 }
+
+/* On phones the top bar's dropdowns (File menu, …) open exactly where the toasts would sit: use the bottom. */
+@media (max-width: 767px) {
+  .toast-host {
+    top: auto;
+    bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+    flex-direction: column-reverse;
+  }
+
+  .toast {
+    animation-name: toast-in-bottom;
+  }
+
+  @keyframes toast-in-bottom {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+}

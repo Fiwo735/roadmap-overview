@@ -19,6 +19,7 @@ export const REAL_NETWORK = process.env.E2E_REAL_NETWORK === '1'
 export const STORAGE_KEYS = {
   trip: 'roadmap-overview:v1:current',
   corrupt: 'roadmap-overview:v1:corrupt',
+  recent: 'roadmap-overview:v1:recent',
   theme: 'roadmap-overview:theme',
 } as const
 

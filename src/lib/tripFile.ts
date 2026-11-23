@@ -1,5 +1,5 @@
 import type { LatLng, Leg, LegRoute, Place, Trip, TripFile } from '../types/trip'
-import { haversineM, isValidLatLng } from './geo'
+import { haversineM, isValidLatLng, pathLengthM } from './geo'
 import { newId } from './id'
 import { decodePolylineUncached } from './polyline'
 import { legRouteKey } from './routeKey'
@@ -8,6 +8,11 @@ import { DEFAULT_TRIP_TITLE, defaultDayAt, isCalendarDate, isLegMode, normalizeD
 
 export const TRIP_FILE_FORMAT = 'roadmap-overview/trip'
 export const TRIP_FILE_VERSION = 1
+
+/** Most places a trip file may hold; real trips have a few dozen. Bigger files are refused. */
+export const MAX_PLACES = 500
+/** Most shaping points kept per leg; the rest are dropped. */
+export const MAX_VIA_PER_LEG = 50
 
 export type ParseTripFileResult =
   | {
@@ -67,6 +72,9 @@ class FileError extends Error {}
 function parsePlaces(raw: unknown, warnings: string[]): Place[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) throw new FileError('"trip.places" must be a list.')
+  if (raw.length > MAX_PLACES) {
+    throw new FileError(`This trip has ${raw.length} places; Roadmap Overview opens at most ${MAX_PLACES}.`)
+  }
   const places: Place[] = []
   const seen = new Set<string>()
   raw.forEach((item, i) => {
@@ -115,11 +123,14 @@ function parseVia(raw: unknown, warnings: string[], label: string): LatLng[] {
     return []
   }
   const via: LatLng[] = []
+  let surplus = 0
   for (const item of raw) {
     const point = parseLatLng(item)
-    if (point) via.push(point)
-    else warnings.push(`${label}: an invalid via point was dropped.`)
+    if (!point) warnings.push(`${label}: an invalid via point was dropped.`)
+    else if (via.length < MAX_VIA_PER_LEG) via.push(point)
+    else surplus++
   }
+  if (surplus > 0) warnings.push(`${label}: only the first ${MAX_VIA_PER_LEG} via points were kept.`)
   return via
 }
 
@@ -159,6 +170,11 @@ function parseLegs(raw: unknown, warnings: string[]): Leg[] {
 
 /** OSRM snaps endpoints to the nearest road, so only reject routes that start/end far away. */
 const MAX_ENDPOINT_GAP_M = 25_000
+/** A saved route's distance must lie within these multiples of the length of its geometry. */
+const MIN_DISTANCE_RATIO = 0.5
+const MAX_DISTANCE_RATIO = 3
+/** ... and a geometry that does not move at all (two places at the same spot) may claim this much. */
+const MAX_ZERO_LENGTH_DISTANCE_M = 1_000
 /** Longest geometry string worth decoding; real full-overview routes are far shorter. */
 const MAX_GEOMETRY_CHARS = 2_000_000
 
@@ -180,6 +196,12 @@ function parseRoute(raw: unknown, from: LatLng, to: LatLng): RouteCheck {
   if (points.length < 2 || !points.every(isValidLatLng)) return { problem: 'has an invalid geometry' }
   if (haversineM(points[0], from) > MAX_ENDPOINT_GAP_M || haversineM(points[points.length - 1], to) > MAX_ENDPOINT_GAP_M) {
     return { problem: 'does not connect its two places' }
+  }
+  // The distance is read from the file, not measured: a road is never shorter than half, nor much
+  // longer than three times, the line drawn for it (the line is simplified, so allow some slack).
+  const lengthM = pathLengthM(points)
+  if (lengthM > 0 ? distanceM < lengthM * MIN_DISTANCE_RATIO || distanceM > lengthM * MAX_DISTANCE_RATIO : distanceM > MAX_ZERO_LENGTH_DISTANCE_M) {
+    return { problem: 'has a distance that does not match its geometry' }
   }
   const route: LegRoute = { key, geometry, distanceM, durationS, source }
   // The ferry stretches only decorate the line: when they do not fit the geometry the route is

@@ -8,7 +8,7 @@ export const CURRENT_TRIP_KEY = 'roadmap-overview:v1:current'
 export const CORRUPT_TRIP_KEY = 'roadmap-overview:v1:corrupt'
 
 /** localStorage can be missing or throw (private mode, blocked site data); never let that escape. */
-function getStorage(): Storage | null {
+export function getStorage(): Storage | null {
   try {
     return globalThis.localStorage ?? null
   } catch {

@@ -73,7 +73,7 @@ describe('restoreSavedTrip', () => {
       { lat: 1, lng: 1 },
       { lat: 2, lng: 2 },
     ])
-    const route = { key, geometry, distanceM: 10, durationS: 5, source: 'osrm' as const }
+    const route = { key, geometry, distanceM: 160_000, durationS: 5, source: 'osrm' as const }
     storage.setItem(CURRENT_TRIP_KEY, JSON.stringify(serializeTripFile(trip, { l1: route })))
 
     restoreSavedTrip()
