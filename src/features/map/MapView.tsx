@@ -10,7 +10,7 @@ import { RideLayer } from '../ride/RideLayer'
 import { MapOverlays } from './MapOverlays'
 import { ensurePanes } from './panes'
 import { setMapInstance } from './mapInstance'
-import { viewForPlaces } from './view'
+import { fitMapToPlaces, viewForPlaces } from './view'
 import './map.css'
 
 /** Creates our panes (before any layer needs them), publishes the map, keeps it sized. */
@@ -21,6 +21,9 @@ function MapSetup() {
 
   useEffect(() => {
     setMapInstance(map)
+    // The first view was fitted before the overlays existed: do it again now that they can be measured.
+    const { places } = useTripStore.getState().trip
+    if (places.length > 0) fitMapToPlaces(map, places, false)
     const observer = new ResizeObserver(() => map.invalidateSize({ animate: false }))
     observer.observe(map.getContainer())
     return () => {

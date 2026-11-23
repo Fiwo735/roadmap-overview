@@ -18,6 +18,7 @@ geocoding are called directly from the client.
 | State | Zustand 5; `zundo` (temporal middleware) for undo/redo of trip intent |
 | Lists | `@dnd-kit/core` + `@dnd-kit/sortable` |
 | Geometry | `@mapbox/polyline` (precision 5) |
+| Countries | `world-atlas` 50 m boundaries + `topojson-client` (own lazy chunk), `flag-icons` SVGs |
 | Tests | Vitest (pure logic), Playwright 1.63 (`@playwright/test`, pinned to the preinstalled browsers) |
 
 ## Screen layout
@@ -69,7 +70,9 @@ src/
                              LegLegend (map legend), legActions, modeIcons
     routing/                 RouteManager (OSRM → route store), legRoutes (`getLegRoutes`/`useLegRoutes`),
                              RouteLayer + reshape (lines, via points, Google-Maps-style reshaping), MapTools
-    stats/ io/ ride/ export-image/   slot placeholders until their feature lands
+    stats/                   title/statistics card (StatsOverlay → TripCard | TripPill), computeStats,
+                             countries (+ countryIndex, worldIndex, countryData), flags, dateRange, samplePath
+    io/ ride/ export-image/  slot placeholders until their feature lands
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
@@ -166,6 +169,13 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
   theme tokens. They live in `features/map/MapOverlays.tsx` as siblings of the Leaflet container,
   so pointer events never reach the map through them. Code outside the `MapContainer` reaches the
   map with `useLeafletMap()` / `getMap()` (`features/map/mapInstance.ts`).
+- Automatic fits leave room for the overlays (F4): `fitMapToPlaces` (so "Fit to trip", fitting a leg,
+  the refit after adding a place and the first view of a restored trip) pads the fit with
+  `overlayInsets(map, base)` (`features/map/overlayInsets.ts`), which measures the children of the
+  top-left slot (title card or pill) and the top-right slot (map tools) when it is called. The card
+  only pushes the fit away on one side, to its right or below it, whichever leaves the larger visible
+  area; a lone place is centred in the visible part. New overlays that cover part of the map should
+  sit in one of those slots (or extend `overlayInsets`), not be absolutely positioned elsewhere.
 
 ## UI conventions
 
@@ -508,3 +518,85 @@ Each feature appends a short entry here: what it added, where it lives, anything
   pale tiles; the legend does not list the dotted "straight line" drive style; a flight across the
   antimeridian is drawn on the far side of the map copy (`lng` beyond ±180); `steps=true` responses are
   much bigger than before.
+
+### F4 — map title card, trip statistics, countries with flags
+
+- **Card** (`features/stats/`): `StatsOverlay` (the top-left slot, unchanged name) renders `TripCard` or,
+  when folded, `TripPill`. The card: title (`InlineText`: shown as a button, click/Enter turns it into a
+  field; Enter or blur commits with `setTitle`, Escape discards, so one undo step per edit — the same
+  store action as the top bar, which therefore follows), optional subtitle (placeholder "Add a
+  subtitle", `setSubtitle`), optional start date (`StartDate`: "Add dates" → a native date field; typing
+  or picking only changes the field, Enter, the check button or leaving it commits (one `setStartDate`
+  step however many segments were changed; an incomplete date or one before 1900 is dropped), Escape
+  discards; once set it shows `formatDateRange(startDate, days)`, e.g. "1 – 14 Jul 2026"), then
+  tiles: Distance (tooltip/screen-reader breakdown by mode), Days, Stops, Driving (only when the trip
+  has a drive leg or driving time; tooltip with the other modes and the total when more than one is in
+  use), one tile per other mode in use (ferry, train, flight), Countries (count + flags). A long
+  title and subtitle are cut to 3 and 2 lines on the card (the full text is the `title` attribute). `data-testid`s: `trip-card`, `card-title`,
+  `card-subtitle`, `start-date`, `stat-<id>` / `stat-<id>-value`, `country-flag` (`data-code`),
+  `stats-status`, `card-collapse`, `trip-pill`. The `useTripStats()` hook feeds it from
+  `useLegRoutes()` and recomputes live as routes arrive; while legs are pending the card has
+  `data-partial="true"`, route-derived tiles are muted (and show "—" while nothing is routed yet), and
+  a footer says "Routing n legs…" / "n legs not routed: totals are incomplete". Countries show "…"
+  while the boundaries load and "—" if they cannot be downloaded (retried on the next change).
+- **Folding**: the chevron folds the card into a pill with the title; the choice is remembered in
+  `localStorage["roadmap-overview:stats-collapsed"]` (`statsCardStore.ts`); without a stored choice it
+  starts folded below 768 px. The card is ≤ 340 px wide and leaves the map tools' column free
+  (`.map-slot--top-left` in `map.css` got a `max-width`).
+- **Statistics** (`computeStats.ts`, framework-free): `computeTripStats(trip, getLegRoutes(),
+  countries?)` → `{ stops, days, distanceM, distanceByModeM, timeByModeS, drivingS, otherTravelS,
+  travelS, countries, pendingLegs, loadingLegs, failedLegs }`. `days` is `eff[last] − eff[0] + 1`
+  (0 without places). Distance and time of a routed drive leg with ferry `spans` are split: the ferry
+  spans' distance and their share of the duration count as ferry; a user `durationMin` is the duration
+  of the whole leg and the spans' durations are scaled to add up to it. Legs that are loading or
+  failed add no distance (and no time unless the user typed a duration); `pendingLegs` says how many.
+  `dateRange.ts`: `addDays`, `formatDateRange` (locale-independent English, "28 Dec 2026 – 3 Jan 2027").
+- **Countries** (framework-free; F7 reuses `detectCountries` and `flagUrl`): `detectCountries(places,
+  getLegRoutes())` → `Promise<{ code, name }[]>`, ordered by first visit (place 1, the countries of
+  leg 1's route, place 2, …); `countriesOfTrip(index, places, legs)` is the synchronous core. The
+  boundaries are world-atlas `countries-50m` through `topojson-client`, in their own chunk
+  (`worldIndex.ts`, ≈ 766 kB / 249 kB gzipped, only imported dynamically by `loadCountryIndex()`; an
+  empty trip never loads it). `countryData.ts` embeds the ISO numeric → alpha-2 table with common
+  English names ("Czechia", "Turkey"); features without an id map by name (Kosovo → `XK`, Northern
+  Cyprus → `CY`, Somaliland → `SO`, the rest are dropped). `countryIndex.ts` is the geometry: 5° grid of
+  polygons, ray-casting with holes, `at(point)` and `near(point, maxM)`. A **place** counts for the
+  country it lies in or, when the 50 m coast puts it in the sea (harbours: Dover, Hirtshals), the
+  nearest land within 10 km. **Routes**: a leg's geometry is sampled every 2 km (`samplePath.ts`, long
+  straight segments interpolated in Mercator, i.e. where they are drawn) and a country counts after 3
+  consecutive samples inside it; samples in no country neither count nor break a run. Only the geometry of
+  road-routed drive legs is sampled, and only outside their ferry spans. Hand-drawn legs (ferry, train,
+  flight, straight drive) are schematic: what their line merely crosses does not count (a straight
+  Vienna → Venice train adds no Slovenia); they contribute their end places and the via points the user
+  put on them (a via point in a country is a deliberate statement that the trip goes there). Road legs
+  that are not routed yet contribute nothing but their places. Memoised per place position
+  and per `LegRoute` object (WeakMap). Measured: a 5 037 km route of 16 791 points takes ~35 ms the
+  first time, 0.02 ms again; building the index ~26 ms. Known limit: the 50 m borders are ~1 km off,
+  so a road hugging a border for ≥ 6 km can add the neighbour.
+- **Flags**: `flagUrl(code)` → `/flags/<code>.svg` (4:3 SVG, no width/height of their own: size the
+  `<img>`/canvas draw yourself) or null. `vite.config.ts` has a small plugin that serves them from
+  `node_modules/flag-icons` in dev and copies all 271 into the build (letting the bundler handle them
+  inlined the small ones into the JavaScript); a flag is only fetched when displayed. Each flag in the
+  card is a focusable image named after its country with a tooltip.
+- **Shared-file edits**: `lib/geo.ts` exports `mercatorY`, `latFromMercatorY`, `MAX_MERCATOR_LAT`;
+  `map/view.ts` (`fitMapToPlaces`/`viewForPlaces` take the overlay insets; `MapView.tsx` refits a restored
+  trip once the overlays exist) and the new `map/overlayInsets.ts`; `map.css`, `vite.config.ts`, `package.json` (world-atlas, topojson-client, flag-icons; dev
+  @types/topojson-client). Types in `types/trip.ts` unchanged. The card covers the map's top-left
+  340 × ~300 px, so the F2/F3 specs that clicked or dragged on "the empty map" at x = 700 now use
+  x = 1000 (`routing.spec.ts`, `legs.spec.ts`): pick test coordinates outside that corner.
+- **Tests**: Vitest for `computeTripStats` (empty, single place, out-of-order days, overrides, ferry
+  spans with and without override, manual modes, pending/failed legs), the country index (holes,
+  antimeridian, `near`), `codesAlong` (dips, runs, null samples), real boundaries (Berlin → Prague →
+  Vienna = DE, CZ, AT; transit countries; coastal harbours; ferry/flight/train/ferry-span handling;
+  Kosovo and Northern Cyprus; the 5 000 km timing), `fitInsets`, `samplePath`, date ranges, the code/name table and
+  flag URLs (every country in the boundaries has a flag file). `e2e/stats.spec.ts` (mocked): numbers of a
+  mocked trip, flags and their tooltips by mouse and keyboard, transit countries, lazy boundaries,
+  boundary failure and recovery, partial/failed routing state, other modes and the distance breakdown,
+  ferry spans with an override, days, hand-drawn legs and via points, no driving tile without a drive
+  leg, title edit with top bar sync and one undo step, Escape/blur, empty title, long texts, subtitle,
+  start date (range, one undo step per edit, Escape, Apply, clear), folding with persistence, phone
+  layout, and that Fit to trip, fitting a leg and the restored first view keep markers clear of the card.
+- **Known gaps**: borders at 50 m resolution (see above); Natural Earth's disputed-area choices apply
+  (Northern Cyprus is shown as Cyprus); the card does not appear in the exported image until F7 draws
+  it; no per-day breakdown; the date field is the browser's native one (looks different per browser);
+  a place picked by search is flown to (`flyToPoint`) without regard for the card, and the fit is not
+  redone when the card is folded or unfolded afterwards.

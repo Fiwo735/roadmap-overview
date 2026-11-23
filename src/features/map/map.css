@@ -40,6 +40,8 @@
   top: var(--space-3);
   left: var(--space-3);
   align-items: flex-start;
+  /* Leaves the column of map tools at the right free. */
+  max-width: calc(100% - 2 * var(--space-3) - 52px);
 }
 
 .map-slot--top-right {

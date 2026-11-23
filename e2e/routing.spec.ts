@@ -460,9 +460,9 @@ test.describe('reshaping the route', () => {
     await openTrip(page, app, 'Lyon', 'Annecy')
     const view = await app.mapView()
     const before = await app.history()
-    await page.mouse.move(700, 150)
+    await page.mouse.move(1000, 150)
     await page.mouse.down()
-    await page.mouse.move(520, 220, { steps: 8 })
+    await page.mouse.move(820, 220, { steps: 8 })
     await page.mouse.up()
     const after = await app.mapView()
     expect(Math.abs(after.lng - view.lng)).toBeGreaterThan(0.05)
@@ -491,7 +491,7 @@ test.describe('reshaping the route', () => {
     expect(await app.history()).toEqual(before)
 
     // The guard is gone afterwards: a plain click on the empty map deselects as usual.
-    await page.mouse.click(700, 120)
+    await page.mouse.click(1000, 120)
     expect((await app.ui()).selectedLegId).toBeNull()
   })
 
@@ -599,7 +599,7 @@ test.describe('hover and selection', () => {
     expect((await app.ui()).selectedLegId).toBe(trip.legs[1].id)
     expect((await app.ui()).selectedPlaceId).toBeNull()
     await expect(routeLine(page, trip.legs[1].id)).toHaveAttribute('stroke-width', '9')
-    await page.mouse.click(700, 120)
+    await page.mouse.click(1000, 120)
     expect((await app.ui()).selectedLegId).toBeNull()
     await expect(routeLine(page, trip.legs[1].id)).toHaveAttribute('stroke-width', '5')
   })
@@ -611,13 +611,17 @@ test.describe('hover and selection', () => {
     const trip = await app.trip()
     expect((await app.ui()).selectedLegId).toBe(trip.legs[1].id)
     await app.settle()
-    // The view is centred on that leg (not on Lyon, nor the whole trip) and shows both its places.
-    const view = await app.mapView()
+    // The view is on that leg (not on Lyon, nor the whole trip), in the part of the map that the title
+    // card leaves free, and shows both its places.
     const path = await app.legPath(1)
     const lats = path.map((p) => p.lat)
     const lngs = path.map((p) => p.lng)
-    expect(view.lat).toBeCloseTo((Math.min(...lats) + Math.max(...lats)) / 2, 1)
-    expect(view.lng).toBeCloseTo((Math.min(...lngs) + Math.max(...lngs)) / 2, 1)
+    const middle = await app.screenPoint((Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2)
+    const card = (await page.getByTestId('trip-card').boundingBox())!
+    expect(middle.x > card.x + card.width || middle.y > card.y + card.height).toBe(true)
+    const map = (await page.getByTestId('map-area').boundingBox())!
+    expect(Math.abs(middle.x - (map.x + map.width / 2))).toBeLessThan(map.width / 3)
+    expect(Math.abs(middle.y - (map.y + map.height / 2))).toBeLessThan(map.height / 3)
     const inside = await page.evaluate(
       (pts) => pts.every((p) => window.__ROADMAP__!.getMap()!.getBounds().contains([p.lat, p.lng])),
       path,

@@ -84,7 +84,7 @@ test.describe('the leg editor', () => {
 
     // Selecting the line on the map opens it as well, and a click on the empty map closes it.
     const id = await legId(app, 0)
-    await page.mouse.click(700, 120)
+    await page.mouse.click(1000, 120)
     // Selecting the leg from the sidebar flew the map to it: wait for that before aiming at the line.
     await app.settle()
     const path = await app.legPath(0)
@@ -93,7 +93,7 @@ test.describe('the leg editor', () => {
     await page.mouse.click(mid.x, mid.y)
     expect((await app.ui()).selectedLegId).toBe(id)
     await expect(connector(page, 0).getByTestId('leg-editor')).toBeVisible()
-    await page.mouse.click(700, 120)
+    await page.mouse.click(1000, 120)
     await expect(editor(page)).toHaveCount(0)
   })
 

@@ -1,0 +1,306 @@
+/* ---- Title and statistics card (map, top-left) -------------------------------------------------- *
+ * A themed overlay card (like the legend and map tools); the tiles under it are always light.      */
+
+.trip-card {
+  width: 340px;
+  max-width: 100%;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+}
+
+.trip-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.trip-card__titles {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.trip-card__title {
+  width: 100%;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+/* Text that turns into a field when clicked: it sits where the text sits, so nothing jumps. */
+.inline-text {
+  display: block;
+  width: calc(100% + 12px);
+  margin: 0 -6px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: text;
+  transition: background-color var(--duration) var(--ease);
+}
+
+/* Long text is cut after a few lines (the title attribute has all of it) so the card keeps its size. */
+.inline-text__text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--clamp-lines, 3);
+}
+
+button.inline-text:hover {
+  background: var(--surface-2);
+}
+
+.inline-text.is-empty {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.inline-text--editing {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+.inline-text--editing::placeholder {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.trip-card__subtitle {
+  --clamp-lines: 2;
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.start-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0 -6px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 550;
+  transition: background-color var(--duration) var(--ease);
+}
+
+button.start-date:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.start-date.is-empty {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.start-date--editing {
+  gap: var(--space-1);
+  padding: 0;
+}
+
+.start-date__input {
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.trip-card__hint {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ---- Figures ------------------------------------------------------------------------------- */
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) var(--space-1) 0 0;
+}
+
+/* Three to a row; the tiles of the last row stretch to fill it. */
+.stat {
+  flex: 1 1 88px;
+  min-width: max-content;
+  padding: var(--space-2) 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.stat--wide {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.stat__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+.stat__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.stat__value {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+/* Numbers that routes still in flight will change are shown quieter. */
+.stat[data-partial='true'] .stat__value {
+  color: var(--text-muted);
+}
+
+.stat--wide .stat__value {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+/* The flags wrap among themselves, beside the count. */
+.stat--wide .flags {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-top: 3px;
+}
+
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flag {
+  display: block;
+  width: 24px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  overflow: hidden;
+  cursor: default;
+}
+
+.flag img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.flag__code {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.trip-card__status {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.trip-card__status p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.trip-card__status .is-warning {
+  color: var(--warning);
+}
+
+/* ---- The folded card ----------------------------------------------------------------------- */
+
+.trip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+  transition: background-color var(--duration) var(--ease);
+}
+
+.trip-pill:hover {
+  background: var(--surface);
+}
+
+.trip-pill svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.trip-pill__title {
+  min-width: 0;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trip-pill__title.is-empty {
+  color: var(--text-faint);
+  font-weight: 500;
+}

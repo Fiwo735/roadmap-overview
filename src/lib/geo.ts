@@ -54,11 +54,11 @@ export function boundsOf(points: readonly LatLng[]): Bounds | null {
 }
 
 /** Web-Mercator "y" of a latitude (the map is drawn in it, so straight lines on screen are straight in it). */
-const mercatorY = (latDeg: number) => Math.log(Math.tan(Math.PI / 4 + (latDeg * Math.PI) / 360))
-const latFromMercatorY = (y: number) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI
+export const mercatorY = (latDeg: number) => Math.log(Math.tan(Math.PI / 4 + (latDeg * Math.PI) / 360))
+export const latFromMercatorY = (y: number) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI
 
 /** Leaflet's maps stop at this latitude; beyond it the projection is not defined. */
-const MAX_MERCATOR_LAT = 85
+export const MAX_MERCATOR_LAT = 85
 
 /**
  * The point `fraction` (0 … 1) of the way along the polyline through `points`, measured by length
