@@ -2,7 +2,8 @@
  * Politeness queue for the free community services (Nominatim, OSRM): tasks start in arrival order,
  * at most `maxConcurrent` at a time and at least `minIntervalMs` apart. Identical requests (same
  * `key`) share one run, and a run is aborted — or dropped, if it has not started — once every caller
- * waiting on it has aborted.
+ * waiting on it has aborted. Waiting tasks start in order of `priority` (higher first), arrival order
+ * within one priority; priority never overtakes a task that is already running, nor the spacing.
  */
 export interface RequestQueueOptions {
   /** Minimum time between the starts of two tasks. */
@@ -18,6 +19,11 @@ export interface QueueRunOptions {
   signal?: AbortSignal
   /** Callers with the same key while one is queued or running share its result. */
   key?: string
+  /**
+   * Waiting tasks start highest priority first (default 0), so e.g. a user's edit overtakes background
+   * work. A caller that joins a waiting run with a higher priority raises that run's priority.
+   */
+  priority?: number
 }
 
 export interface RequestQueue {
@@ -39,6 +45,7 @@ interface Subscriber {
 
 interface Job {
   key: string | undefined
+  priority: number
   task: (signal: AbortSignal) => Promise<unknown>
   controller: AbortController
   subscribers: Set<Subscriber>
@@ -58,6 +65,13 @@ export function createRequestQueue({
 
   const forget = (job: Job) => {
     if (job.key !== undefined && byKey.get(job.key) === job) byKey.delete(job.key)
+  }
+
+  /** Insert behind every waiting job of the same or a higher priority. */
+  function enqueue(job: Job) {
+    const at = waiting.findIndex((other) => other.priority < job.priority)
+    if (at < 0) waiting.push(job)
+    else waiting.splice(at, 0, job)
   }
 
   function pump() {
@@ -107,14 +121,18 @@ export function createRequestQueue({
     get pending() {
       return waiting.length
     },
-    run<T>(task: (signal: AbortSignal) => Promise<T>, { signal, key }: QueueRunOptions = {}): Promise<T> {
+    run<T>(task: (signal: AbortSignal) => Promise<T>, { signal, key, priority = 0 }: QueueRunOptions = {}): Promise<T> {
       if (signal?.aborted) return Promise.reject(abortError())
       return new Promise<T>((resolve, reject) => {
         let job = key === undefined ? undefined : byKey.get(key)
         if (!job) {
-          job = { key, task, controller: new AbortController(), subscribers: new Set(), started: false }
+          job = { key, priority, task, controller: new AbortController(), subscribers: new Set(), started: false }
           if (key !== undefined) byKey.set(key, job)
-          waiting.push(job)
+          enqueue(job)
+        } else if (!job.started && priority > job.priority) {
+          waiting.splice(waiting.indexOf(job), 1)
+          job.priority = priority
+          enqueue(job)
         }
         const joined = job
         const onAbort = () => {

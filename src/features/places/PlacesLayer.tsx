@@ -201,6 +201,16 @@ export function PlacesLayer() {
     }
   }, [map])
 
+  // The map tools' "Show labels" switch: CSS (places.css) hides every label but the hovered/selected one.
+  useEffect(() => {
+    const container = map.getContainer()
+    const apply = (show: boolean) => container.classList.toggle('hide-place-labels', !show)
+    apply(useUiStore.getState().showLabels)
+    return useUiStore.subscribe((state, prev) => {
+      if (state.showLabels !== prev.showLabels) apply(state.showLabels)
+    })
+  }, [map])
+
   // Map-level interaction: right-click menu, click on empty map clears the selection.
   useEffect(() => {
     const onContextMenu = (e: LeafletMouseEvent) =>

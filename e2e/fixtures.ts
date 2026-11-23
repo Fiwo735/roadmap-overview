@@ -1,7 +1,9 @@
 import { test as base, expect, type BrowserContext, type Page, type Route } from '@playwright/test'
 // Loads the `window.__ROADMAP__` typing used by the helpers below.
 import type {} from '../src/types/debug'
-import type { LegRoute, Trip, TripFile } from '../src/types/trip'
+import { decodePolyline } from '../src/lib/polyline'
+import { legRouteKey } from '../src/lib/routeKey'
+import type { LatLng, LegRoute, Trip, TripFile } from '../src/types/trip'
 import { placeInput } from './mocks/gazetteer'
 import { reverseGazetteer, searchGazetteer } from './mocks/nominatim'
 import { fakeRoute, OsrmError, parseCoordinates } from './mocks/osrm'
@@ -141,6 +143,7 @@ type UiSnapshot = {
   expandedPlaceId: string | null
   renamingPlaceId: string | null
   openDialogId: string | null
+  showLabels: boolean
 }
 
 /** Helpers that read and drive the app through the dev-only `window.__ROADMAP__` hook. */
@@ -183,15 +186,20 @@ export class App {
         expandedPlaceId: s.expandedPlaceId,
         renamingPlaceId: s.renamingPlaceId,
         openDialogId: s.openDialogId,
+        showLabels: s.showLabels,
       }
     })
   }
 
   /** The route cache: routes by routing key, and per-key loading/error status. */
-  routes(): Promise<{ routes: Record<string, LegRoute>; status: Record<string, 'loading' | 'error'> }> {
+  routes(): Promise<{
+    routes: Record<string, LegRoute>
+    status: Record<string, 'loading' | 'error'>
+    errors: Record<string, string>
+  }> {
     return this.page.evaluate(() => {
-      const { routes, status } = window.__ROADMAP__!.routes.getState()
-      return { routes, status }
+      const { routes, status, errors } = window.__ROADMAP__!.routes.getState()
+      return { routes, status, errors }
     })
   }
 
@@ -258,6 +266,72 @@ export class App {
       const raw = localStorage.getItem(key)
       return raw ? (JSON.parse(raw) as TripFile) : null
     }, STORAGE_KEYS.trip)
+  }
+
+  /** The cached route of leg `index` (fails when it is not routed yet). */
+  async legRoute(index: number): Promise<LegRoute> {
+    const [trip, { routes }] = await Promise.all([this.trip(), this.routes()])
+    const leg = trip.legs[index]
+    const from = trip.places.find((p) => p.id === leg.fromId)!
+    const to = trip.places.find((p) => p.id === leg.toId)!
+    const route = routes[legRouteKey(from, to, leg)]
+    if (!route) throw new Error(`Leg ${index} has no cached route`)
+    return route
+  }
+
+  /** The routed geometry of leg `index`, decoded. */
+  async legPath(index: number): Promise<LatLng[]> {
+    return decodePolyline((await this.legRoute(index)).geometry).slice()
+  }
+
+  /** Page coordinates (client pixels) of a map position at the current view. */
+  screenPoint(lat: number, lng: number): Promise<{ x: number; y: number }> {
+    return this.page.evaluate(
+      ([la, ln]) => {
+        const map = window.__ROADMAP__!.getMap()!
+        const p = map.latLngToContainerPoint([la, ln])
+        const box = map.getContainer().getBoundingClientRect()
+        return { x: box.left + p.x, y: box.top + p.y }
+      },
+      [lat, lng],
+    )
+  }
+
+  /** The map position under a page position (client pixels). */
+  latLngAt(x: number, y: number): Promise<LatLng> {
+    return this.page.evaluate(
+      ([px, py]) => {
+        const map = window.__ROADMAP__!.getMap()!
+        const box = map.getContainer().getBoundingClientRect()
+        const { lat, lng } = map.containerPointToLatLng([px - box.left, py - box.top])
+        return { lat, lng }
+      },
+      [x, y],
+    )
+  }
+
+  /** Wait until the map has stopped moving (fit/fly animations included). */
+  async settle() {
+    await this.page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          const map = window.__ROADMAP__!.getMap()!
+          // Leaflet keeps no public "animating" flag; a second animated move started while one still
+          // runs ends short of its target, so tests must wait for the first to finish.
+          const internals = map as unknown as { _animatingZoom?: boolean; _panAnim?: { _inProgress?: boolean } }
+          let last = ''
+          let stable = 0
+          const tick = () => {
+            const now = JSON.stringify([map.getCenter(), map.getZoom()])
+            const busy = internals._animatingZoom === true || internals._panAnim?._inProgress === true
+            stable = now === last && !busy ? stable + 1 : 0
+            last = now
+            if (stable >= 4) resolve()
+            else requestAnimationFrame(tick)
+          }
+          tick()
+        }),
+    )
   }
 
   /** Map centre and zoom. */

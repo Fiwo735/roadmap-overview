@@ -50,10 +50,10 @@ src/
                              geo (haversine, bounds), polyline (encode/decode + memo), format,
                              id, trip (defaults, day rules, syncLegs), tripFile (parse/serialize),
                              routeKey, modes, geoResult (Nominatim result → GeoResult, short name),
-                             requestQueue (politeness queue), lru, nearest (point-to-path distance,
-                             insert index)
-  services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs), nominatim.ts,
-                             later osrm.ts
+                             requestQueue (politeness queue), lru, nearest (point-to-path projection,
+                             insert index, via-point index), simplify (Douglas–Peucker),
+                             manualRoute (routes that need no router)
+  services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs), nominatim.ts, osrm.ts
   store/                     tripStore (undoable intent), uiStore, routeStore, persistence
   components/                shared UI primitives: Button, IconButton (+Tooltip), Menu, Dialog,
                              ContextMenu (a Menu opened at a point), Toast (+ the `toast` API in
@@ -63,8 +63,10 @@ src/
     map/                     MapView, panes, mapInstance (getMap/useLeafletMap), view helpers
     theme/                   ThemeToggle, theme.ts (init/choose)
     places/                  PlacesPanel (sortable list, search), PlacesLayer (markers, context menus)
-    legs/                    LegConnector (between place rows; summary and mode editor built on it)
-    routing/ stats/ io/ ride/ export-image/   slot placeholders until their feature lands
+    legs/                    LegConnector (between place rows: leg summary; the mode editor builds on it)
+    routing/                 RouteManager (OSRM → route store), legRoutes (`getLegRoutes`/`useLegRoutes`),
+                             RouteLayer + reshape (lines, via points, Google-Maps-style reshaping), MapTools
+    stats/ io/ ride/ export-image/   slot placeholders until their feature lands
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
@@ -113,12 +115,14 @@ See `src/types/trip.ts`. Key rules:
   produce one history entry per gesture (commit on blur/Enter/drag end). Machine-made follow-ups of
   a gesture (a reverse-geocoded name arriving after a drop) go through `withoutHistory(fn)`.
 - `store/uiStore.ts`: non-undoable UI state — theme, mobile sidebar, selection/hover of places
-  and legs, which place row is expanded into search (`expandedPlaceId`) or being renamed
+  and legs (selecting a place deselects the leg and vice versa), the map tools' `showLabels`, which place row is expanded into search (`expandedPlaceId`) or being renamed
   (`renamingPlaceId`; the two are mutually exclusive), the open dialog id. Ids that disappear from
   the trip (undo, delete, import) are cleared automatically (`bootstrap.ts`). Features with
   self-contained state (ride playback, …) add their own small store.
 - `store/routeStore.ts`: derived route cache `Record<key, LegRoute>` + per-key status
-  (`loading`/`error`). Not undoable.
+  (`loading`/`error`) and, for errors, a user-presentable reason (`errors`). Not undoable. Written
+  only by the route manager; everything else reads through `getLegRoutes()` / `useLegRoutes()`
+  (`features/routing/legRoutes.ts`, see F2).
 - `store/persistence.ts`: debounced autosave of a `TripFile` (trip + routes of current legs) to
   `localStorage["roadmap-overview:v1:current"]`, restored on start. Theme lives in
   `localStorage["roadmap-overview:theme"]`.
@@ -133,7 +137,7 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 | Service | Use | Rules we follow |
 | --- | --- | --- |
 | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution (map and exported image); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. |
-| `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline`; one request per leg (from, via…, to); a queue with ≤ 1 request in flight and ≥ 1 s between starts; results cached by key; stale requests aborted. |
+| `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=false&alternatives=false`; one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; geometry simplified (12 m) before caching. |
 | `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
 
 Base URLs are constants in `src/services/config.ts` so they can be pointed elsewhere.
@@ -149,8 +153,10 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
   the tiles are always light, so they stay a white-ringed badge and a light pill on any tile.
   Crowded labels give way to each other (`features/places/labelLayout.ts`); adding the class
   `hide-place-labels` to the map container hides all labels but the hovered/selected one.
-- Route styling comes from `MODES` (`src/lib/modes.ts`). Hovered/selected legs get a
-  highlight; legs still routing show a thin grey dashed straight placeholder.
+- Route styling comes from `MODES` (`src/lib/modes.ts`) through `features/routing/legStyle.ts`: a
+  darker casing under the line, thicker when hovered/selected; legs still routing show a thin grey
+  dashed straight placeholder, failed ones a red dashed line, straight drive legs a dotted line.
+  Route and via-point layers are not themed (the tiles never are).
 - Map overlays are React components stacked above the map (not Leaflet popups), styled with the
   theme tokens. They live in `features/map/MapOverlays.tsx` as siblings of the Leaflet container,
   so pointer events never reach the map through them. Code outside the `MapContainer` reaches the
@@ -251,7 +257,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
 - **Tests**: Vitest covers lib, stores and persistence; Playwright covers the shell, theme, title,
   undo/redo, autosave, mobile layout, the mocks themselves and the shared components.
 - **Known gaps**: two open tabs overwrite each other's autosave (last write wins; no
-  cross-tab sync or warning; planned for F8); no route layers yet (F2); the top bar
+  cross-tab sync or warning; planned for F8); the top bar
   has no overflow strategy for the later Ride/Image/File buttons on phones (F8).
 
 ### F1 — places list, search, day field, labelled markers
@@ -318,7 +324,108 @@ Each feature appends a short entry here: what it added, where it lives, anything
   `e2e/places.spec.ts` (mocked Nominatim) covers searching/adding, reorder (mouse and keyboard,
   undo/redo), day edits and the warning, row search/replace, rename, zoom/delete, hover/selection
   sync, marker drag + undo, late names, label decluttering and the context menus.
-- **Known gaps**: leg connectors are a placeholder line (F2); dragging a marker has no keyboard
+- **Known gaps**: dragging a marker has no keyboard
   equivalent (use row search); long-press on touch relies on the browser/Leaflet emitting
   `contextmenu` (not verified on a real device); labels avoid each other and markers but not route
   lines; an undo step older than a late reverse-geocoded name keeps the old machine name.
+
+### F2 — OSRM road routing, route reshaping, leg summaries, map tools
+
+- **OSRM client** (`services/osrm.ts`): `routeDrive(points, { signal })` → `{ geometry, distanceM,
+  durationS }` (geometry = precision-5 polyline, already simplified). One `createRequestQueue`
+  (`createOsrmClient({ fetch, … })` for tests): ≤ 1 in flight, ≥ 1 s between starts, identical URLs
+  share a run, aborted queued requests never reach the network, and `priority` (higher first; a
+  caller joining a waiting run with a higher one raises it) lets user edits overtake background work
+  without breaking the spacing or the one-in-flight rule. Failures reject with `OsrmError`
+  (`kind`: network / http / timeout / route, plus OSRM's `code`, e.g. `NoRoute`); its `message` is
+  written for the user and ends up in the route store's `errors`. Aborts reject with an AbortError.
+  **Simplification** (`lib/simplify.ts`, Douglas–Peucker in projected metres, 12 m): measured on the
+  real server, Paris→Lyon (464 km) 28.9 kB → 3.5 kB, Lyon→Annecy (139 km) 8.1 kB → 1.3 kB,
+  Annecy→Zurich (319 km) 29.1 kB → 3.3 kB of polyline text — 84–89 % smaller, roughly 7–10 bytes
+  per km, so a 3 000 km trip is ~25 kB in localStorage.
+- **Route manager** (`features/routing/routeManager.ts`, mounted by `RouteManager.tsx`;
+  `createRouteManager({ fetchRoute })` for tests): on every change of the trip's places/legs it
+  derives the keys the trip needs (`needsRouter(leg)` = the mode is `routed` in `MODES` and the leg is
+  not `straight`), requests the missing ones, aborts requests for keys no longer needed, and clears
+  statuses of keys it forgets. Results go to the route store by key, never into the trip. A failed
+  key stays failed until `retryRoute(key)` (no retry loop). Keys that a *user edit* asked for are
+  queued with `USER_PRIORITY`, so a drop or a moved place does not wait behind the routing of a
+  freshly opened trip: a trip change counts as an edit when it needs at most 4 new routes (a gesture
+  changes 1–3 legs, opening or importing a trip many), and so does Retry; the first sync after start
+  and cache losses are background work. `stop()` is deferred by a tick so React's dev remount does
+  not abort and re-send the first request.
+- **Reading routes** (`features/routing/legRoutes.ts`) — the one way stats, ride and export read
+  geometry: `getLegRoutes()` (plain function) / `useLegRoutes()` (hook) return, in trip order,
+  `{ leg, from, to, key, route?, coords, status: 'ok' | 'loading' | 'error', error? }`. `coords` is
+  the decoded route when `ok`, otherwise the straight placeholder through places and via points
+  (frozen, shared: copy before modifying). The array is the same object until places, legs or route
+  store change. Legs that need no router (straight drive legs; F3's ferry/train/flight) are computed
+  on demand by the pure `computeManualRoute(from, via, to, mode)` (`lib/manualRoute.ts`: straight
+  segments, haversine distance, `estimateDurationS`), remembered in an LRU by key, and are
+  **never** stored in the route store or autosaved. F3: add the great-circle/other shapes inside
+  `computeManualRoute`; `needsRouter` already follows `MODES[mode].routed`.
+- **Map layer** (`RouteLayer.tsx`, imperative Leaflet like the markers): per leg a casing polyline
+  (route-casing pane), a line (route pane) and an invisible 18 px `route-hit` polyline that takes the
+  pointer; elements carry `data-leg-id` and `data-role="route-casing|route-line|route-hit"` (tests
+  use them). Hover/selection only restyle (`setStyle`), never rebuild. Hover sets
+  `ui.hoveredLegId` (mouse and pen only), a click selects the leg, a click on the empty map
+  deselects, right-click is forwarded to the map's own context menu (so "Insert place here" works on
+  a line).
+- **Reshaping** (`reshape.ts`): while a mouse hovers a leg that is not loading, a white handle
+  (non-interactive marker in the via pane) follows the pointer, snapped to the line
+  (`nearestOnPath`). A capture-phase `mousedown` on the map container takes the press over before
+  Leaflet's map dragging sees it, so dragging from a line never pans while everywhere else still
+  does; moving less than 4 px stays a click. During the drag a dotted preview runs previous anchor →
+  cursor → next anchor; the drop calls `addVia` once at `viaInsertIndex(coords, via, grabPoint)`
+  (the index comes from where the line was **grabbed**: each existing via point is located along the
+  route, never earlier than the one before, so routes that double back stay correct). Esc cancels,
+  and so does releasing outside the map (over the sidebar or outside the window; the preview
+  disappears as soon as the pointer leaves the map). The click that ends a dropped or cancelled drag
+  is swallowed, also when the button is still down after Esc. Pressing on a line blurs the focused
+  element (the press is taken over from the browser, so a day field being edited commits as on any
+  other click). The leg is selected when a drop commits, not when the drag starts. Via points are
+  draggable markers (preview while dragging, one `moveVia` on drop; released outside the map they
+  snap back); double-click, right-click or Delete on a focused one removes it; tooltip "Drag to
+  change route · double-click to remove". Undo/redo hit the route cache: no request.
+- **Previous line kept while re-routing**: a leg that was routed before and whose key changes keeps
+  drawing its last routed geometry (faded, `stale` in `legStyle`) until the new route arrives; a
+  failure replaces it with the red line at once, and the grey straight placeholder is only for legs
+  that were never routed. The state is per leg in `RouteLayer` (`lastRouted`); `getLegRoutes()` still
+  reports `loading` with placeholder `coords`, so stats, ride and export never see stale geometry.
+- **Sidebar** (`legs/LegConnector.tsx`, mode icons in `legs/modeIcons.tsx`): a rail on the places'
+  badge axis with the mode icon on it and "312 km · 3 h 40 min" (`effectiveDurationS`, so a duration
+  override shows); spinner + "Routing…" while loading; on error the reason plus "Retry" and "Use
+  straight line" (`updateLeg(id, { straight: true })`, one undo step). Hover and selection are
+  shared with the map; clicking selects the leg and fits the map to it (closing the mobile
+  slide-over); a leg selected on the map scrolls its connector into view. `data-status`,
+  `data-mode`, `data-hovered`, `data-selected` are on the connector. **F3:** the selected leg's mode
+  editor goes in the marked slot at the end of `LegConnector`; the summary reads everything from
+  `useLegRoutes()`.
+- **Map tools** (`MapTools.tsx`): "Fit to trip" (places + all route points, `fitMapToTrip()` in
+  `mapFit.ts`; `fitMapToLeg(id)` likewise) and a "Show labels" toggle (`ui.showLabels`;
+  `PlacesLayer` mirrors it as the `hide-place-labels` class on the map container).
+- **Contract / shared-store changes**: `types/trip.ts` unchanged. `routeStore` gained `errors` and
+  `setStatus(key, status, error?)`; `uiStore` gained `showLabels` and the place/leg selection
+  coupling; `lib/nearest.ts` gained `nearestOnPath` / `viaInsertIndex` (`distanceToPathM` now uses
+  it); `PlacesLayer` got the label-class effect.
+- **Tests**: Vitest for simplification, projection and via index (including a route that doubles
+  back), manual routes, the OSRM client (stubbed fetch, fake timers: URL, parsing, error mapping,
+  spacing, abort-before-send, de-dupe), the route manager (fake router), `getLegRoutes`, leg styles,
+  UI/route store additions. `e2e/routing.spec.ts` (mocked OSRM) covers routes and summaries, the
+  loading and error/Retry/straight-line states, request spacing and dropping, reload without
+  re-routing, reshaping (handle, drag-to-add with index, undo/redo without requests, via drag,
+  double-/right-click/Delete removal, Escape, release over the sidebar for a new and an existing via
+  point, a focused field committing when a drag starts, panning elsewhere, no handle while loading,
+  the previous line staying while a leg re-routes, user edits jumping the queue), hover/
+  selection sync, connector click-to-fit, scroll-into-view, right-click on a line, fit to trip and
+  show labels. New `App` helpers: `legRoute(i)`, `legPath(i)`, `screenPoint()`, `latLngAt()`,
+  `settle()` (waits for Leaflet's animations: a second animated move started during the first ends
+  short of its target).
+- **Known gaps**: no live re-routing while dragging (only the dotted preview); no edge auto-pan
+  while dragging a new via point out of a line (dragging an existing via point does auto-pan, also
+  towards the sidebar before a release there cancels it); reshaping from a line is mouse/pen only —
+  a touch drag on a line pans the map, only the via markers themselves drag by touch; via points
+  cannot be moved with the keyboard (Delete removes a focused one, but there is no keyboard way to
+  add or move one); the in-memory route cache and the manual-route LRU are not pruned during a
+  session (autosave only keeps the routes of current legs); OSRM is asked for one leg per second at
+  most, so routing a long trip from scratch takes about a second per leg.

@@ -123,4 +123,83 @@ describe('createRequestQueue', () => {
     await badResult
     await expect(good).resolves.toBe('ok')
   })
+
+  describe('priority', () => {
+    it('starts higher priorities first, arrival order within one, and keeps the spacing', async () => {
+      const queue = createRequestQueue({ minIntervalMs: 1000 })
+      const order: string[] = []
+      const starts: number[] = []
+      const t0 = Date.now()
+      const task = (name: string) => async () => {
+        order.push(name)
+        starts.push(Date.now() - t0)
+      }
+      const all = [
+        queue.run(task('first')), // starts at once: nothing to overtake
+        queue.run(task('background-1')),
+        queue.run(task('background-2')),
+        queue.run(task('edit-1'), { priority: 10 }),
+        queue.run(task('edit-2'), { priority: 10 }),
+        queue.run(task('urgent'), { priority: 20 }),
+      ]
+      await vi.advanceTimersByTimeAsync(10_000)
+      await Promise.all(all)
+      expect(order).toEqual(['first', 'urgent', 'edit-1', 'edit-2', 'background-1', 'background-2'])
+      expect(starts).toEqual([0, 1000, 2000, 3000, 4000, 5000])
+    })
+
+    it('never overtakes a task that is already running', async () => {
+      const queue = createRequestQueue({ minIntervalMs: 0 })
+      const finish: Array<() => void> = []
+      const started: string[] = []
+      const slow = (name: string) => () => {
+        started.push(name)
+        return new Promise<void>((resolve) => finish.push(resolve))
+      }
+      const a = queue.run(slow('background'))
+      const b = queue.run(slow('edit'), { priority: 10 })
+      await vi.advanceTimersByTimeAsync(10)
+      expect(started).toEqual(['background'])
+      finish[0]()
+      await a
+      await vi.advanceTimersByTimeAsync(10)
+      expect(started).toEqual(['background', 'edit'])
+      finish[1]()
+      await b
+    })
+
+    it('raises the priority of a waiting run when a caller with a higher one joins it', async () => {
+      const queue = createRequestQueue({ minIntervalMs: 1000 })
+      const order: string[] = []
+      const task = (name: string) => async () => {
+        order.push(name)
+      }
+      const all = [
+        queue.run(task('first')),
+        queue.run(task('a')),
+        queue.run(task('b'), { key: 'b' }),
+        queue.run(task('c')),
+        queue.run(task('b-again'), { key: 'b', priority: 5 }), // same run as 'b'
+      ]
+      await vi.advanceTimersByTimeAsync(10_000)
+      await Promise.all(all)
+      expect(order).toEqual(['first', 'b', 'a', 'c'])
+    })
+
+    it('drops an aborted high-priority run without disturbing the others', async () => {
+      const queue = createRequestQueue({ minIntervalMs: 1000 })
+      const order: string[] = []
+      const task = (name: string) => async () => {
+        order.push(name)
+      }
+      const controller = new AbortController()
+      const first = queue.run(task('first'))
+      const low = queue.run(task('low'))
+      const high = queue.run(task('high'), { priority: 9, signal: controller.signal }).catch(() => undefined)
+      controller.abort()
+      await vi.advanceTimersByTimeAsync(5000)
+      await Promise.all([first, low, high])
+      expect(order).toEqual(['first', 'low'])
+    })
+  })
 })

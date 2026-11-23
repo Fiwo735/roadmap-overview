@@ -19,12 +19,16 @@ export interface UiState {
   renamingPlaceId: string | null
   /** Id of the open modal dialog (e.g. 'share'), or null. */
   openDialogId: string | null
+  /** Map tools "Show labels": place labels on the map (the hovered/selected one always shows). */
+  showLabels: boolean
 
   setTheme: (theme: Theme) => void
   setSidebarOpen: (open: boolean) => void
   toggleSidebar: () => void
+  /** Selecting a place deselects the selected leg (one thing is selected at a time). */
   selectPlace: (id: string | null) => void
   hoverPlace: (id: string | null) => void
+  /** Selecting a leg deselects the selected place. */
   selectLeg: (id: string | null) => void
   hoverLeg: (id: string | null) => void
   expandPlace: (id: string | null) => void
@@ -32,6 +36,7 @@ export interface UiState {
   renamePlace: (id: string | null) => void
   openDialog: (id: string) => void
   closeDialog: () => void
+  setShowLabels: (show: boolean) => void
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -44,17 +49,19 @@ export const useUiStore = create<UiState>()((set) => ({
   expandedPlaceId: null,
   renamingPlaceId: null,
   openDialogId: null,
+  showLabels: true,
 
   setTheme: (theme) => set({ theme }),
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  selectPlace: (selectedPlaceId) => set({ selectedPlaceId }),
+  selectPlace: (selectedPlaceId) => set((s) => ({ selectedPlaceId, selectedLegId: selectedPlaceId ? null : s.selectedLegId })),
   hoverPlace: (hoveredPlaceId) => set({ hoveredPlaceId }),
-  selectLeg: (selectedLegId) => set({ selectedLegId }),
+  selectLeg: (selectedLegId) => set((s) => ({ selectedLegId, selectedPlaceId: selectedLegId ? null : s.selectedPlaceId })),
   hoverLeg: (hoveredLegId) => set({ hoveredLegId }),
   // Search and rename are two modes of the same row: opening one ends the other.
   expandPlace: (expandedPlaceId) => set((s) => ({ expandedPlaceId, renamingPlaceId: expandedPlaceId ? null : s.renamingPlaceId })),
   renamePlace: (renamingPlaceId) => set((s) => ({ renamingPlaceId, expandedPlaceId: renamingPlaceId ? null : s.expandedPlaceId })),
   openDialog: (openDialogId) => set({ openDialogId }),
   closeDialog: () => set({ openDialogId: null }),
+  setShowLabels: (showLabels) => set({ showLabels }),
 }))
