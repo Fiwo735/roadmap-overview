@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { EllipsisVertical, GripVertical, LocateFixed, Pencil, Trash2 } from 'lucide-react'
+import { EllipsisVertical, GripVertical, LocateFixed, Pencil, StickyNote, Trash2 } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { IconButton } from '../../components/IconButton'
 import { Menu, type MenuEntry } from '../../components/Menu'
@@ -12,6 +12,7 @@ import type { Place } from '../../types/trip'
 import { LegConnector } from '../legs/LegConnector'
 import { useRideStore } from '../ride/rideStore'
 import { DayField } from './DayField'
+import { PlaceNote } from './PlaceNote'
 import { PlaceSearch } from './PlaceSearch'
 import { displayName } from './names'
 import { replacePlaceFromResult, zoomToPlace } from './placeActions'
@@ -192,6 +193,12 @@ export function PlaceRow({ place, index, isLast, earlierThan }: PlaceRowProps) {
               <span className="place-row__name" data-testid="place-name">
                 {name}
               </span>
+              {place.note ? (
+                <span className="place-row__note" data-testid="place-note-indicator" title={place.note}>
+                  <StickyNote size={13} aria-hidden="true" />
+                  <span className="sr-only">Has a note</span>
+                </span>
+              ) : null}
             </button>
           )}
           {addressTip.tooltip}
@@ -243,6 +250,7 @@ export function PlaceRow({ place, index, isLast, earlierThan }: PlaceRowProps) {
               onEscape={collapse}
               testId="row-search"
             />
+            <PlaceNote placeId={place.id} note={place.note ?? ''} placeName={name} onEscape={collapse} />
           </div>
         ) : null}
       </div>

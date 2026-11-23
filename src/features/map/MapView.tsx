@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import { TILE_ATTRIBUTION, TILE_MAX_ZOOM, TILE_URL } from '../../services/config'
 import { useTripStore } from '../../store/tripStore'
 import { PlacesLayer } from '../places/PlacesLayer'
+import { PresentationLayer } from '../presentation/PresentationLayer'
 import { RouteLayer } from '../routing/RouteLayer'
 import { RouteManager } from '../routing/RouteManager'
 import { RideLayer } from '../ride/RideLayer'
@@ -60,6 +61,7 @@ export function MapView() {
         <RouteLayer />
         <PlacesLayer />
         <RideLayer />
+        <PresentationLayer />
       </MapContainer>
       <MapOverlays />
     </div>

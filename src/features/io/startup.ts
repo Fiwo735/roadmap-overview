@@ -1,9 +1,10 @@
 import { toast } from '../../components/toast'
-import { decodeShareHash, isShareHash } from '../../lib/shareLink'
+import { decodeShareHash, isShareHash, wantsPresentation } from '../../lib/shareLink'
 import { parseTripFile } from '../../lib/tripFile'
 import { parseTripJson } from '../../lib/tripFileIo'
 import { fetchTripText, resolveSourceUrl, TripSourceError } from '../../services/tripSource'
 import { useTripStore } from '../../store/tripStore'
+import { enterPresentation } from '../presentation/presentationStore'
 import { offerLinkedTrip, openLinkedTrip } from './importTrip'
 
 /**
@@ -11,17 +12,21 @@ import { offerLinkedTrip, openLinkedTrip } from './importTrip'
  * reloading or adding a history entry: a reload must not import it again over the user's edits.
  * Other parameters stay.
  */
-function cleanAddress({ hash = false, src = false }: { hash?: boolean; src?: boolean }): void {
+function cleanAddress({ hash = false, src = false, present = false }: { hash?: boolean; src?: boolean; present?: boolean }): void {
   const url = new URL(window.location.href)
   if (hash) url.hash = ''
   if (src) url.searchParams.delete('src')
-  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  // A link that asked for presentation mode (`&present` after the trip) keeps asking as `?present`, so a
+  // reload presents again; leaving presentation mode takes it out (presentationStore.ts).
+  if (present && !url.searchParams.has('present')) url.searchParams.set('present', '')
+  const search = url.search.replace(/([?&]present)=(?=&|$)/, '$1')
+  window.history.replaceState(window.history.state, '', `${url.pathname}${search}${url.hash}`)
 }
 
 /** Open the trip in a `#trip=…` hash. The hash is removed afterwards so a reload does not import it again. */
 function openShareHash(hash: string, atStart: boolean): void {
   // Also a `src` that came with the link: the link wins, and a reload must not fetch it either.
-  cleanAddress({ hash: true, src: true })
+  cleanAddress({ hash: true, src: true, present: wantsPresentation('', hash) })
   const decoded = decodeShareHash(hash)
   const parsed = decoded.ok ? parseTripFile(decoded.data) : decoded
   if (!parsed.ok) {
@@ -65,6 +70,8 @@ async function openSource(src: string): Promise<void> {
  * it); a share link pasted into an already open page (only the hash changes) is handled too.
  */
 export function openTripFromAddress(): void {
+  // `?present` / `&present`: show the trip in presentation mode (before the first render, so the map is laid out full width).
+  if (wantsPresentation(window.location.search, window.location.hash)) enterPresentation()
   if (isShareHash(window.location.hash)) {
     openShareHash(window.location.hash, true)
   } else {
@@ -72,6 +79,8 @@ export function openTripFromAddress(): void {
     if (src) void openSource(src)
   }
   window.addEventListener('hashchange', () => {
-    if (isShareHash(window.location.hash)) openShareHash(window.location.hash, false)
+    if (!isShareHash(window.location.hash)) return
+    if (wantsPresentation('', window.location.hash)) enterPresentation()
+    openShareHash(window.location.hash, false)
   })
 }

@@ -7,6 +7,7 @@ import { useUiStore } from '../../store/uiStore'
 import type { LatLng } from '../../types/trip'
 import { PANES } from '../map/panes'
 import { cleanLatLng } from '../places/placeActions'
+import { isEditingLocked } from '../ride/rideStore'
 import type { LegRouteInfo } from './legRoutes'
 
 /** CSS class of the invisible, wide polyline that catches the pointer on a leg. */
@@ -245,7 +246,7 @@ export function createReshaper(
 
   return {
     hover(legId, e) {
-      if (drag || !isMouse()) return
+      if (drag || !isMouse() || isEditingLocked()) return
       const info = getLeg(legId)
       if (!reshapeable(info)) return hideHandle()
       const nearest = nearestOnPath(e.latlng, info.coords)

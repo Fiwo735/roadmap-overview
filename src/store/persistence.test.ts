@@ -3,7 +3,7 @@ import { encodePolyline } from '../lib/polyline'
 import { createTrip } from '../lib/trip'
 import { serializeTripFile } from '../lib/tripFile'
 import { useToastStore } from '../components/toast'
-import { CORRUPT_TRIP_KEY, CURRENT_TRIP_KEY, restoreSavedTrip, startAutosave } from './persistence'
+import { CORRUPT_TRIP_KEY, CURRENT_TRIP_KEY, holdAutosave, releaseAutosave, restoreSavedTrip, startAutosave } from './persistence'
 import { useRouteStore } from './routeStore'
 import { clearHistory, useTripStore } from './tripStore'
 
@@ -233,5 +233,51 @@ describe('startAutosave', () => {
     useTripStore.getState().setTitle('Late')
     vi.advanceTimersByTime(500)
     expect(saved()).toBeNull()
+  })
+
+  describe('while another tab’s trip waits for a decision', () => {
+    it('does not write until released, and releasing without saving leaves the stored trip alone', () => {
+      const stop = startAutosave(100)
+      storage.setItem(CURRENT_TRIP_KEY, JSON.stringify({ trip: { title: 'Theirs' } }))
+      holdAutosave()
+      useTripStore.getState().setTitle('Mine')
+      vi.advanceTimersByTime(1000)
+      expect(JSON.parse(storage.getItem(CURRENT_TRIP_KEY)!).trip.title).toBe('Theirs')
+      // Closing the page must not overwrite it either.
+      listeners.pagehide()
+      expect(JSON.parse(storage.getItem(CURRENT_TRIP_KEY)!).trip.title).toBe('Theirs')
+      releaseAutosave(false)
+      vi.advanceTimersByTime(1000)
+      expect(JSON.parse(storage.getItem(CURRENT_TRIP_KEY)!).trip.title).toBe('Theirs')
+      // The next edit saves again.
+      useTripStore.getState().setTitle('Mine again')
+      vi.advanceTimersByTime(200)
+      expect(saved().title).toBe('Mine again')
+      stop()
+    })
+
+    it('"keep mine" writes the open trip at once', () => {
+      const stop = startAutosave(100)
+      useTripStore.getState().setTitle('Mine')
+      vi.advanceTimersByTime(200)
+      storage.setItem(CURRENT_TRIP_KEY, JSON.stringify({ trip: { title: 'Theirs' } }))
+      holdAutosave()
+      useTripStore.getState().setTitle('Mine, edited')
+      vi.advanceTimersByTime(500)
+      releaseAutosave(true)
+      expect(saved().title).toBe('Mine, edited')
+      stop()
+    })
+
+    it('stopping autosave forgets a hold', () => {
+      const stop = startAutosave(100)
+      holdAutosave()
+      stop()
+      const again = startAutosave(100)
+      useTripStore.getState().setTitle('Fresh')
+      vi.advanceTimersByTime(200)
+      expect(saved().title).toBe('Fresh')
+      again()
+    })
   })
 })

@@ -13,6 +13,8 @@ import {
   isLongShareLink,
   isOpenableShareLink,
   isShareHash,
+  splitShareHash,
+  wantsPresentation,
 } from './shareLink'
 import { parseTripFile, serializeTripFile } from './tripFile'
 
@@ -158,6 +160,48 @@ describe('buildShareUrl', () => {
   it('works for a local dev address', () => {
     const url = buildShareUrl(serializeTripFile(trip()), 'http://127.0.0.1:5173/')
     expect(url.startsWith('http://127.0.0.1:5173/#trip=')).toBe(true)
+  })
+
+  it('keeps the sub-path the app is hosted under', () => {
+    const file = serializeTripFile(trip())
+    const url = buildShareUrl(file, 'https://someone.github.io/roadmap-overview/?src=x&present#trip=old')
+    expect(url.startsWith('https://someone.github.io/roadmap-overview/#trip=')).toBe(true)
+    expect(url).not.toContain('src=')
+    expect(decodeShareHash(new URL(url).hash)).toMatchObject({ ok: true })
+  })
+
+  it('makes a presentation link that still opens as a trip', () => {
+    const file = serializeTripFile(trip())
+    const plain = buildShareUrl(file, 'https://example.org/app/')
+    const present = buildShareUrl(file, 'https://example.org/app/', { present: true })
+    expect(present).toBe(`${plain}&present`)
+    expect(isOpenableShareLink(present)).toBe(true)
+    const decoded = decodeShareHash(new URL(present).hash)
+    expect(decoded.ok && parseTripFile(decoded.data).ok).toBe(true)
+  })
+})
+
+describe('presentation flag', () => {
+  it('is read from the query (?present) and from after the share payload (&present)', () => {
+    expect(wantsPresentation('?present', '')).toBe(true)
+    expect(wantsPresentation('?src=a.json&present', '')).toBe(true)
+    expect(wantsPresentation('?present=1', '')).toBe(true)
+    expect(wantsPresentation('', '#trip=ABC&present')).toBe(true)
+    expect(wantsPresentation('', '#trip=ABC&x=1&present=1')).toBe(true)
+  })
+
+  it('is off without it, and when it is switched off', () => {
+    expect(wantsPresentation('', '')).toBe(false)
+    expect(wantsPresentation('?src=a.json', '#trip=ABC')).toBe(false)
+    expect(wantsPresentation('?present=0', '')).toBe(false)
+    expect(wantsPresentation('?present=false', '#trip=ABC&present=0')).toBe(false)
+    expect(wantsPresentation('', '#present')).toBe(false)
+  })
+
+  it('does not disturb the payload', () => {
+    expect(splitShareHash('#trip=ABC-$+')).toEqual({ payload: 'ABC-$+', present: false })
+    expect(splitShareHash('#trip=ABC-$+&present')).toEqual({ payload: 'ABC-$+', present: true })
+    expect(decodeShareHash(encodeShareHash(serializeTripFile(trip()), { present: true }))).toMatchObject({ ok: true })
   })
 })
 

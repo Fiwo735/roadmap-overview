@@ -1,3 +1,5 @@
+import { useToastDock } from '../../components/portal'
+import { WelcomeHint } from '../help/WelcomeHint'
 import { LegLegend } from '../legs/LegLegend'
 import { StatsOverlay } from '../stats/StatsOverlay'
 import { MapTools } from '../routing/MapTools'
@@ -16,10 +18,21 @@ export function MapOverlays() {
       <div className="map-slot map-slot--top-right">
         <MapTools />
       </div>
+      <div className="map-slot map-slot--center">
+        <WelcomeHint />
+      </div>
       <div className="map-slot map-slot--bottom-left">
         <LegLegend />
       </div>
       <div className="map-slot map-slot--bottom-center">
+        {/* Toasts (components/Toast.tsx) are portalled in here on wide screens: above the ride controls, clear of the card, the tools and the legend. */}
+        <div
+          className="toast-dock"
+          ref={(el) => {
+            useToastDock.getState().set(el)
+            return () => useToastDock.getState().set(null)
+          }}
+        />
         <RideHud />
       </div>
     </div>

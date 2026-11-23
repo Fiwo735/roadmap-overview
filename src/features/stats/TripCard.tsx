@@ -5,6 +5,7 @@ import { formatDistance, formatDuration } from '../../lib/format'
 import { MODE_ORDER, MODES } from '../../lib/modes'
 import { useTripStore } from '../../store/tripStore'
 import { MODE_ICONS } from '../legs/modeIcons'
+import { useEditingLocked } from '../ride/rideStore'
 import { CountryFlags } from './CountryFlags'
 import { InlineText } from './InlineText'
 import { StartDate } from './StartDate'
@@ -25,6 +26,8 @@ export function TripCard() {
   const setSubtitle = useTripStore((s) => s.setSubtitle)
   const setCollapsed = useStatsCardStore((s) => s.setCollapsed)
   const { stats, countriesStatus } = useTripStats()
+  // While editing is locked (a ride, presentation mode) the card only shows what is there: no "Add a subtitle".
+  const locked = useEditingLocked()
 
   const partial = stats.pendingLegs > 0
   const hasRoutes = stats.stops > 1
@@ -53,15 +56,17 @@ export function TripCard() {
               onCommit={setTitle}
             />
           </h2>
-          <InlineText
-            className="trip-card__subtitle"
-            value={subtitle}
-            placeholder="Add a subtitle"
-            label="Trip subtitle"
-            maxLength={200}
-            testId="card-subtitle"
-            onCommit={setSubtitle}
-          />
+          {subtitle || !locked ? (
+            <InlineText
+              className="trip-card__subtitle"
+              value={subtitle}
+              placeholder="Add a subtitle"
+              label="Trip subtitle"
+              maxLength={200}
+              testId="card-subtitle"
+              onCommit={setSubtitle}
+            />
+          ) : null}
           <StartDate days={stats.days} />
         </div>
         <IconButton

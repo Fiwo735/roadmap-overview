@@ -19,21 +19,15 @@ export function formatDistance(meters: number): string {
   return `${group(Math.round(km))} km`
 }
 
-/** "45 min", "3 h 40 min", "2 d 5 h". Non-finite or negative input renders as an em dash. */
+/**
+ * "45 min", "3 h 40 min", "34 h 5 min". Travel times are always written in hours, never days: "34 h" reads as
+ * the length of a drive, "1 d 10 h" as a calendar span. Non-finite or negative input renders as an em dash.
+ */
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '—'
   const totalMin = Math.round(seconds / 60)
   if (totalMin < 60) return `${totalMin} min`
-  if (totalMin < 24 * 60) {
-    const h = Math.floor(totalMin / 60)
-    const m = totalMin % 60
-    return m === 0 ? `${h} h` : `${h} h ${m} min`
-  }
-  let d = Math.floor(totalMin / (24 * 60))
-  let h = Math.round((totalMin % (24 * 60)) / 60)
-  if (h === 24) {
-    d += 1
-    h = 0
-  }
-  return h === 0 ? `${d} d` : `${d} d ${h} h`
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m === 0 ? `${group(h)} h` : `${group(h)} h ${m} min`
 }

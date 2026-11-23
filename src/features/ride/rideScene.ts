@@ -13,6 +13,7 @@ import { clipPath } from '../../lib/pathAlong'
 import { splitSpans } from '../../lib/routeSpans'
 import { useTripStore } from '../../store/tripStore'
 import type { LatLng, LegMode, RouteSpan } from '../../types/trip'
+import { lockPane, unlockPane } from '../map/paneLock'
 import { PANES } from '../map/panes'
 import { legStyle } from '../routing/legStyle'
 import { comfortBox, glideOffset, insideBox, inView, medianOf, nextFacing, type Facing } from './camera'
@@ -156,7 +157,7 @@ export function createRideScene(map: LeafletMap): { destroy: () => void } {
 
   // ---- Editing lock: nothing in the map can be dragged, clicked, focused or right-clicked meanwhile.
   const lockedPanes = LOCKED_PANES.map((name) => map.getPane(name)).filter((p): p is HTMLElement => !!p)
-  for (const pane of lockedPanes) pane.setAttribute('inert', '')
+  for (const pane of lockedPanes) lockPane(pane, 'ride')
   const dimmedPanes = DIMMED_PANES.map((name) => map.getPane(name)).filter((p): p is HTMLElement => !!p)
   for (const pane of dimmedPanes) pane.classList.add('ride-dimmed')
   container.classList.add('ride-active')
@@ -415,7 +416,7 @@ export function createRideScene(map: LeafletMap): { destroy: () => void } {
       trail.destroy()
       doneTrail.destroy()
       halos.destroy()
-      for (const pane of lockedPanes) pane.removeAttribute('inert')
+      for (const pane of lockedPanes) unlockPane(pane, 'ride')
       for (const pane of dimmedPanes) pane.classList.remove('ride-dimmed')
       container.classList.remove('ride-active')
       // Back to the view from before the ride, unless the ride ended because something else took over the map.

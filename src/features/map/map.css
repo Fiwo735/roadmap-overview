@@ -36,6 +36,11 @@
   pointer-events: auto;
 }
 
+/* The toast dock only passes pointer events to the toasts themselves. */
+.map-slot > .toast-dock {
+  pointer-events: none;
+}
+
 .map-slot--top-left {
   top: var(--space-3);
   left: var(--space-3);
@@ -48,6 +53,14 @@
   top: var(--space-3);
   right: var(--space-3);
   align-items: flex-end;
+}
+
+.map-slot--center {
+  top: 50%;
+  left: 50%;
+  align-items: center;
+  width: min(460px, calc(100% - 2 * var(--space-3)));
+  transform: translate(-50%, -50%);
 }
 
 .map-slot--bottom-left {
@@ -131,4 +144,10 @@
 .leaflet-bottom.leaflet-left .leaflet-control-scale {
   margin-left: var(--space-3);
   margin-bottom: var(--space-3);
+}
+
+/* ---- Presentation mode (F8): the route-shaping handles are an editing tool --------------------- */
+
+.leaflet-container.is-presenting .leaflet-ro-via-pane {
+  display: none;
 }

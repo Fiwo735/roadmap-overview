@@ -8,6 +8,7 @@ import { useRouteStore } from '../../store/routeStore'
 import { clearHistory, undo, useTripStore } from '../../store/tripStore'
 import type { Trip, TripFile } from '../../types/trip'
 import { getMap } from '../map/mapInstance'
+import { editingLockedReason } from '../ride/rideStore'
 import { fitMapToTrip } from '../routing/mapFit'
 import { askToConfirm } from './confirm'
 
@@ -39,7 +40,8 @@ function repairNote(warnings: string[]): string {
   return ` The file had problems that were repaired: ${warnings.slice(0, 2).join(' ')}${more}`
 }
 
-const undoAction: ToastOptions['action'] = { label: 'Undo', onClick: undo }
+// A toast can outlive the moment it was shown: its actions change the trip, so they ask the editing lock again when clicked.
+const undoAction: ToastOptions['action'] = { label: 'Undo', onClick: undo, blockedBy: editingLockedReason }
 
 // ---------------------------------------------------------------------------------------------
 // Looking after the trip that is about to be replaced
@@ -60,7 +62,7 @@ export function keepOpenTrip(incoming?: Trip): Kept {
 }
 
 /** Replace the trip the user has open with `file` — after keeping the old one, or after they confirmed losing it. */
-async function replaceOpenTrip(file: TripFile, what: string): Promise<boolean> {
+export async function replaceOpenTrip(file: TripFile, what: string): Promise<boolean> {
   if (keepOpenTrip(file.trip) === 'failed') {
     const open = quoted(useTripStore.getState().trip.title)
     const confirmed = await askToConfirm({
@@ -142,7 +144,7 @@ function announceLinkedTrip(file: TripFile, warnings: string[], kept: boolean): 
   const opened = `Opened ${quoted(title)} (${placesText(places.length)}).${repairNote(warnings)}`
   if (kept) {
     toast.info(`${opened} Your previous trip was kept.`, {
-      action: { label: 'Restore previous trip', onClick: () => void restoreRecentTrip() },
+      action: { label: 'Restore previous trip', onClick: () => void restoreRecentTrip(), blockedBy: editingLockedReason },
       duration: 20_000,
     })
   } else {
@@ -168,6 +170,7 @@ export function openLinkedTrip(file: TripFile, warnings: string[], { atStart = f
             installTrip(file)
             announceLinkedTrip(file, warnings, false)
           },
+          blockedBy: editingLockedReason,
         },
         duration: 30_000,
       },
@@ -182,7 +185,7 @@ export function openLinkedTrip(file: TripFile, warnings: string[], { atStart = f
 /** A linked trip that arrived after the user had started editing: ask before replacing their work. */
 export function offerLinkedTrip(file: TripFile, warnings: string[], host: string): void {
   toast.info(`Open the linked trip ${quoted(file.trip.title)} from ${host}? It replaces the trip you are editing, which stays in Recent trips.`, {
-    action: { label: 'Open linked trip', onClick: () => openLinkedTrip(file, warnings) },
+    action: { label: 'Open linked trip', onClick: () => openLinkedTrip(file, warnings), blockedBy: editingLockedReason },
     duration: 30_000,
   })
 }

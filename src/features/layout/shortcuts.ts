@@ -16,6 +16,18 @@ export function isTextEntry(target: EventTarget | null): boolean {
 }
 
 /**
+ * May a single-key shortcut (`?`, `P`) act on this key press? Not with Ctrl/Cmd/Alt held, not when
+ * something else used the key already, not while a modal dialog is open, and not where letters belong to
+ * the target: a text field, or a menu (type-ahead).
+ */
+export function plainKeyAllowed(e: KeyboardEvent): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || e.isComposing) return false
+  if (document.querySelector('dialog[open]')) return false
+  if (isTextEntry(e.target)) return false
+  return !(e.target instanceof Element && e.target.closest('[role="menu"]'))
+}
+
+/**
  * Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z and Ctrl+Y redo. Ignored while typing in a field (the browser's
  * own text undo keeps working there) and while a modal dialog is open (the trip behind it must not
  * change under the user).

@@ -71,11 +71,62 @@ test.describe('mobile layout', () => {
     await expect(toggle).toBeFocused()
   })
 
-  test('the top bar keeps title and undo/redo reachable without overflowing', async ({ page, app }) => {
+  test('the top bar keeps the title and the main actions in view and folds the rest into a menu', async ({ page, app }) => {
     await app.goto()
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
     await expect(page.getByTestId('trip-title')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible()
-    await expect(page.getByTestId('theme-toggle')).toBeVisible()
+    await expect(page.getByTestId('ride-button')).toBeVisible()
+    await expect(page.getByTestId('export-image-button')).toBeVisible()
+    await expect(page.getByTestId('file-menu')).toBeVisible()
+    await expect(page.getByTestId('topbar-overflow')).toBeVisible()
+    // Undo, redo, presentation, help and the theme are in the overflow menu, not in the bar.
+    for (const id of ['undo', 'redo', 'present-toggle', 'help-button', 'theme-toggle']) await expect(page.getByTestId(id)).toBeHidden()
+    // Nothing in the bar sticks out of the screen.
+    const bar = await page.locator('.topbar').evaluate((el) => [...el.querySelectorAll('button, input')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0).map((r) => [r.left, r.right]))
+    for (const [left, right] of bar) {
+      expect(left).toBeGreaterThanOrEqual(0)
+      expect(right).toBeLessThanOrEqual(390)
+    }
+
+    await page.getByTestId('topbar-overflow').click()
+    await expect(page.getByRole('menuitem', { name: 'Undo' })).toHaveAttribute('aria-disabled', 'true')
+    await expect(page.getByRole('menuitem', { name: 'Redo' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Presentation mode' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Help and shortcuts' })).toBeVisible()
+    await page.getByRole('menuitem', { name: 'Switch to dark mode' }).click()
+    await expect.poll(async () => (await app.ui()).theme).toBe('dark')
   })
+
+  test('undo and redo work from the overflow menu', async ({ page, app }) => {
+    await app.goto()
+    await app.addPlaces('Lyon')
+    await page.getByTestId('topbar-overflow').click()
+    await page.getByRole('menuitem', { name: 'Undo' }).click()
+    expect((await app.trip()).places).toHaveLength(0)
+    await page.getByTestId('topbar-overflow').click()
+    await page.getByRole('menuitem', { name: 'Redo' }).click()
+    expect((await app.trip()).places).toHaveLength(1)
+  })
+})
+
+test.describe('wide screens', () => {
+  test('the top bar shows every button and no overflow menu', async ({ page, app }) => {
+    await app.goto()
+    for (const id of ['undo', 'redo', 'ride-button', 'export-image-button', 'file-menu', 'present-toggle', 'help-button', 'theme-toggle']) {
+      await expect(page.getByTestId(id)).toBeVisible()
+    }
+    await expect(page.getByTestId('topbar-overflow')).toBeHidden()
+  })
+
+  for (const width of [768, 900, 1024]) {
+    test(`the top bar fits at ${width}px`, async ({ page, app }) => {
+      await page.setViewportSize({ width, height: 800 })
+      await app.goto()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+      const box = (await page.getByTestId('trip-title').boundingBox())!
+      expect(box.width).toBeGreaterThan(120)
+      const last = (await page.getByTestId('theme-toggle').boundingBox())!
+      expect(last.x + last.width).toBeLessThanOrEqual(width)
+    })
+  }
 })

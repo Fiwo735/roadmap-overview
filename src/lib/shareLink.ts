@@ -14,19 +14,47 @@ const MAX_UNPACKED_CHARS = 5_000_000
 
 export const isShareHash = (hash: string): boolean => hash.startsWith(SHARE_HASH_PREFIX)
 
+/** What follows the trip in a presentation link: `#trip=<payload>&present`. (The payload alphabet has no `&`.) */
+const PRESENT_FLAG = 'present'
+
+/** The compressed trip and the options of a share hash (`#trip=<payload>[&present]`). */
+export function splitShareHash(hash: string): { payload: string; present: boolean } {
+  const rest = hash.slice(SHARE_HASH_PREFIX.length)
+  const [payload, ...options] = rest.split('&')
+  return { payload, present: options.some((o) => isPresentFlag(o)) }
+}
+
+/** `present`, `present=1` and `present=yes` switch it on; `present=0` and `present=false` do not. */
+const isOn = (value: string | null | undefined): boolean => value !== '0' && value !== 'false'
+
+function isPresentFlag(text: string): boolean {
+  const [key, value] = text.split('=')
+  return key === PRESENT_FLAG && isOn(value)
+}
+
+/** Does the address ask for presentation mode: `?present` in the query or `&present` after a share hash? */
+export function wantsPresentation(search: string, hash: string): boolean {
+  const query = new URLSearchParams(search)
+  if (query.has(PRESENT_FLAG) && isOn(query.get(PRESENT_FLAG))) return true
+  return isShareHash(hash) && splitShareHash(hash).present
+}
+
 /**
  * `#trip=…` for `file`. Cached routes are left out: they are big, and the receiving app derives
  * them again (the link stays short, the file is the way to share routes).
  */
-export function encodeShareHash(file: TripFile): string {
+export function encodeShareHash(file: TripFile, { present = false } = {}): string {
   const { routes: _routes, ...withoutRoutes } = file
-  return SHARE_HASH_PREFIX + compressToEncodedURIComponent(JSON.stringify(withoutRoutes))
+  return SHARE_HASH_PREFIX + compressToEncodedURIComponent(JSON.stringify(withoutRoutes)) + (present ? `&${PRESENT_FLAG}` : '')
 }
 
-/** The shareable address of this page for `file`: the page URL minus query and old hash, plus the trip. */
-export function buildShareUrl(file: TripFile, pageUrl: string): string {
+/**
+ * The shareable address of this page for `file`: the page URL minus query and old hash, plus the trip
+ * (the sub-path a page is hosted under stays). With `present` the link opens in presentation mode.
+ */
+export function buildShareUrl(file: TripFile, pageUrl: string, options: { present?: boolean } = {}): string {
   const url = new URL(pageUrl)
-  return `${url.origin}${url.pathname}${encodeShareHash(file)}`
+  return `${url.origin}${url.pathname}${encodeShareHash(file, options)}`
 }
 
 export const isLongShareLink = (url: string): boolean => url.length > LONG_SHARE_LINK_CHARS
@@ -34,7 +62,7 @@ export const isLongShareLink = (url: string): boolean => url.length > LONG_SHARE
 /** Can this app open the link again? (It refuses to unpack hashes beyond `MAX_SHARE_PAYLOAD_CHARS`.) */
 export function isOpenableShareLink(url: string): boolean {
   const at = url.indexOf(SHARE_HASH_PREFIX)
-  return at >= 0 && url.length - at - SHARE_HASH_PREFIX.length <= MAX_SHARE_PAYLOAD_CHARS
+  return at >= 0 && splitShareHash(url.slice(at)).payload.length <= MAX_SHARE_PAYLOAD_CHARS
 }
 
 export type DecodeShareResult = { ok: true; data: unknown } | { ok: false; error: string }
@@ -48,7 +76,7 @@ export function decodeShareHash(
   decompress: (payload: string) => string | null = decompressFromEncodedURIComponent,
 ): DecodeShareResult {
   if (!isShareHash(hash)) return { ok: false, error: 'This is not a trip link.' }
-  const payload = hash.slice(SHARE_HASH_PREFIX.length)
+  const { payload } = splitShareHash(hash)
   if (payload.length > MAX_SHARE_PAYLOAD_CHARS) return { ok: false, error: 'This share link is too large to open.' }
   const damaged = { ok: false, error: 'This share link is damaged or incomplete.' } as const
   try {

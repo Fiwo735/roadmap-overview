@@ -86,6 +86,8 @@ export function StartDate({ days }: { days: number }) {
     )
   }
 
+  // Nothing to show and nothing to add: no "Add dates" prompt while editing is locked.
+  if (locked && !startDate) return null
   const range = startDate ? formatDateRange(startDate, days) : ''
   return (
     <button

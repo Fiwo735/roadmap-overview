@@ -14,6 +14,7 @@
 
 .toast {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
@@ -48,7 +49,7 @@
 }
 
 .toast__message {
-  flex: 1;
+  flex: 1 1 12ch;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -65,6 +66,23 @@
 .toast__action:hover {
   background: var(--accent-soft);
 }
+.toast__action--quiet {
+  color: var(--text-muted);
+}
+.toast__action--quiet:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* In the map's toast dock (wide screens): static, so the dock's flex column stacks them above the ride controls. */
+.toast-host--docked {
+  position: static;
+  z-index: auto;
+  align-items: stretch;
+  width: 440px;
+  max-width: 100%;
+  transform: none;
+}
 
 /* On phones the top bar's dropdowns (File menu, …) open exactly where the toasts would sit: use the bottom. */
 @media (max-width: 767px) {
@@ -72,6 +90,11 @@
     top: auto;
     bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
     flex-direction: column-reverse;
+  }
+
+  /* A ride's controls (about 210 px tall) sit at the bottom as well: the toasts go above them. */
+  body:has(.ride-hud) .toast-host {
+    bottom: calc(252px + env(safe-area-inset-bottom, 0px));
   }
 
   .toast {

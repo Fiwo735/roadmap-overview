@@ -241,6 +241,10 @@ test.describe('sorting', () => {
   test('rows can be reordered with the keyboard', async ({ page, app }) => {
     await app.goto()
     await app.addPlaces('Lyon', 'Annecy', 'Zurich')
+    // The list must be at rest before the gesture starts: dnd-kit measures the rows when it picks one up,
+    // and a route arriving mid-drag swaps a connector's spinner for its summary and shifts everything
+    // below it. (A moved layout is also what a dropped key press looks like.)
+    for (const i of [0, 1]) await expect(page.getByTestId('leg-connector').nth(i)).toHaveAttribute('data-status', 'ok')
     const grip = rowOf(page, 'Annecy').getByTestId('place-grip')
     // dnd-kit narrates every step in a live region (see `announcements` in PlacesPanel). Waiting for
     // the sentence is waiting for dnd-kit's own state: the next key is only sent once the previous
@@ -248,12 +252,21 @@ test.describe('sorting', () => {
     // the row still "over" itself and change nothing).
     const status = page.locator('[id^="DndLiveRegion"]')
     await grip.focus()
+    // Keys go to whatever has the focus: make sure it is the grip, not something that took it since.
+    await expect(grip).toBeFocused()
     await page.keyboard.press('Space')
     // (The pick-up sentence is replaced at once by this one: dnd-kit reports the row as over itself.)
     await expect(status).toHaveText('Annecy is over position 2 of 3.')
     await expect(page.getByTestId('place-list')).toHaveAttribute('data-dragging', 'true')
-    await page.keyboard.press('ArrowDown')
-    await expect(status).toHaveText('Annecy is over position 3 of 3.')
+    // dnd-kit's KeyboardSensor starts listening for the arrow and drop keys in a `setTimeout` after the
+    // pick-up (core.esm.js: `attach`), so the sentence above can be on screen a moment BEFORE the key
+    // handler exists, and a key sent in that moment is lost. Send ArrowDown until dnd-kit shows it took it
+    // (the last position is the end of the list: a second press changes nothing). Once it has, the drop
+    // key finds its handler.
+    await expect(async () => {
+      await page.keyboard.press('ArrowDown')
+      await expect(status).toHaveText('Annecy is over position 3 of 3.', { timeout: 750 })
+    }).toPass({ timeout: 7_000 })
     await page.keyboard.press('Space')
     await expect(status).toHaveText('Annecy dropped at position 3 of 3.')
     await expect.poll(() => names(app)).toEqual(['Lyon', 'Zurich', 'Annecy'])

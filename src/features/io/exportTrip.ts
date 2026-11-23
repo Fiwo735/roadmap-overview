@@ -60,13 +60,16 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** Copy a link that opens this trip (without its routes, which the receiver derives again). */
-export async function copyShareLink(): Promise<void> {
+/**
+ * Copy a link that opens this trip (without its routes, which the receiver derives again). With `present`
+ * the link opens in presentation mode: the map, the title card and the ride, without the editing tools.
+ */
+export async function copyShareLink({ present = false } = {}): Promise<void> {
   if (!hasPlaces()) {
     toast.info('There is nothing to share yet. Add a place first.')
     return
   }
-  const url = buildShareUrl(currentTripFile(false), window.location.href)
+  const url = buildShareUrl(currentTripFile(false), window.location.href, { present })
   if (!isOpenableShareLink(url)) {
     toast.error('This trip is too big for a share link. Save it as a JSON file (File → Save as JSON) and share that.')
     return
@@ -81,6 +84,6 @@ export async function copyShareLink(): Promise<void> {
       { duration: 12_000 },
     )
   } else {
-    toast.success('Share link copied to the clipboard.')
+    toast.success(present ? 'Presentation link copied to the clipboard.' : 'Share link copied to the clipboard.')
   }
 }

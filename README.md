@@ -1,0 +1,271 @@
+# Roadmap Overview
+
+![A campervan trip from Hamburg to the Norwegian fjords: numbered stops, the road route, the title card with distance, driving time and countries](docs/screenshots/hero-light.png)
+
+**Roadmap Overview** is a browser app for summarising a campervan trip on an [OpenStreetMap](https://www.openstreetmap.org/) map. You
+add the places you stop at, give each a day, and the app draws the route between them: roads you can reshape by dragging the line (like
+Google Maps), plus ferry, train and flight legs drawn by hand. A title card shows the distance, driving time, days and the countries you
+pass; a little campervan can *ride* the route day by day; and the trip can be saved as a file, shared as a link, shown full-screen or
+exported as a picture. Everything runs in the browser: there is no backend and no account, and the trip stays in your browser until you
+save or share it.
+
+Try it with the bundled sample trip: **File → Load sample trip**.
+
+## Contents
+
+- [Features](#features)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [The trip file](#the-trip-file)
+- [Sharing](#sharing)
+- [Development](#development)
+- [External services](#external-services)
+- [Hosting](#hosting)
+
+## Features
+
+### Places
+
+- **Add a place** by typing a name in the *Add a place…* box under the list and pressing Enter (search runs on Enter, never while you type),
+  or right-click the map (long-press on a phone) and choose *Add place here*. *Insert place here* puts a place into the route where you
+  clicked.
+- **Reorder** places by dragging the grip at the left of a row (or with the keyboard: Space on the grip, arrow keys, Space). Drag a marker on
+  the map to move a place; its name is looked up again.
+- **Days.** The *Day* field of a place is the day of travel on which you reach it. Days drive the trip length, the dates and the ride;
+  leave gaps for rest days.
+- **Click a place** to expand it: search for a different location, rename it, or write a **note** (opening hours, what to see, where to
+  park). A note shows as a small icon on its row and in the label on the map while you hover or select the marker.
+
+### Routes
+
+- Legs between places are **routed over roads** ([OSRM](https://project-osrm.org/)) and cached, so undo, redo and re-ordering are instant.
+- **Reshape a route** by dragging the line: it bends through the point you drop (a *via point*). Drag a via point to move it,
+  double-click or right-click it to remove it. *Reset shape* in the leg editor removes them all.
+- **Custom legs.** Click the connector between two places to open the leg editor: switch the leg to **Ferry**, **Train** or **Flight**
+  (drawn by hand, flights as great-circle arcs, with a time estimate), turn off **Follow roads** for a straight drive, set the travel
+  time yourself and give the leg a label. Car ferries inside a driven route are detected automatically.
+
+![The leg editor open on the car ferry between Hirtshals and Kristiansand](docs/screenshots/leg-editor.png)
+
+### The title card
+
+The card at the top-left of the map shows the trip's title, subtitle and dates (click to edit) and the **distance**, **days**, **stops**,
+**driving time** (and ferry, train or flight time), and the **countries** you pass with their flags. Travel times are always written in
+hours ("34 h 28 min"). Fold the card into a pill with the chevron.
+
+### Ride
+
+**Ride** plays the trip as a campervan driving the route day by day (a ferry, train or plane on those legs), with a trail behind it, the
+day and date, the distance so far and a scrubber. Space plays or pauses, ← and → jump between days, **Follow** keeps the camera on the
+vehicle, Esc closes it.
+
+![The ride, part-way through the trip: the van near Odda on day 7, with the controls at the bottom](docs/screenshots/ride.png)
+
+### Presentation mode
+
+The presentation button in the top bar (or the **P** key) hides the sidebar and every editing tool, so the map, the title card and the
+ride fill the window: handy for showing a trip to others. Esc or the same button leaves it. **File → Copy presentation link** makes a link
+that opens a trip straight in this mode (see [Sharing](#sharing)).
+
+![Presentation mode: the map and the title card across the whole window](docs/screenshots/presentation.png)
+
+### Image export
+
+The **Export image** button in the top bar (the picture icon) opens a dialog that renders the whole trip as a **PNG picture**: the map with
+the route, numbered stops, the title and statistics card and the legend, with the OpenStreetMap attribution. Choose a size (landscape
+1920 × 1080, portrait, square, or A4 print), a sharper 2× resolution, what to show (card, place names, day numbers, legend) and the card
+style (match the app, light or dark), check the live preview, then **Download PNG** or **Copy image**. Exporting never changes the trip, so it
+also works in presentation mode.
+
+![An image exported from the sample trip: the map with the route, the stops and the title card](docs/screenshots/exported-image.jpg)
+
+### Saving, loading, sharing
+
+Your trip is **saved in this browser automatically** and comes back when you reopen the page. Open the same page in two tabs and the second
+one asks, when the first saves a different trip, whether to load it or keep its own. See [Sharing](#sharing) for files and links.
+
+### Light and dark
+
+The theme follows your system and can be switched with the moon/sun button; the map tiles always keep the standard OpenStreetMap style.
+
+![The sample trip in the dark theme](docs/screenshots/dark.png)
+
+### Help
+
+The **?** button (or the `?` key) opens a help dialog with short how-tos and every keyboard shortcut. A first visit with an empty trip
+also shows a small dismissible hint.
+
+On phones the top bar keeps the title, Ride, Export image and File; undo, redo, presentation mode, help and the theme are in the **⋯** menu, and
+the places list is a slide-over from the button at the top-left.
+
+## Keyboard shortcuts
+
+`Ctrl` is `⌘` on a Mac. Letters and `?` are ignored while you type in a field, a menu is open or a dialog is shown.
+
+| Keys | Does |
+| --- | --- |
+| `?` | Open the help |
+| `P` | Presentation mode on or off |
+| `Esc` | Close a menu, dialog or editor; leave presentation mode; close the ride |
+| `Ctrl`+`Z` | Undo |
+| `Ctrl`+`Shift`+`Z` or `Ctrl`+`Y` | Redo |
+| `Ctrl`+`S` | Save the trip as a JSON file |
+| `Ctrl`+`O` | Open a trip file |
+| `Enter` | In a search box: search. In the name, day or note fields: save what you typed |
+| `↑` `↓` | In search results: pick one. In the day field: one day earlier or later |
+| `Esc` | In a field: undo what you typed and leave it |
+| `Space`, `↑` `↓`, `Space` / `Esc` | On a row's grip: pick the place up, move it, drop it / put it back |
+| `Delete` | On a focused route handle: remove it |
+| `Esc` | While dragging a route line: cancel the reshape |
+| `←` `↑` `→` `↓`, `+` `-` | Pan and zoom the map (when it has the focus) |
+| `Space` | Ride: play or pause |
+| `←` `→` | Ride: previous or next day |
+| `↑` `↓` `Home` `End` `Enter` | In menus: move, jump, choose; letters jump to an item |
+
+## The trip file
+
+A trip is saved as a JSON file (`*.trip.json`). The format is the **data contract** of the app and is documented in
+[`src/types/trip.ts`](src/types/trip.ts):
+
+```jsonc
+{
+  "format": "roadmap-overview/trip",
+  "version": 1,
+  "exportedAt": "2026-11-23T20:56:28.314Z",
+  "trip": {
+    "id": "t_h7196f0ioy",
+    "title": "Hamburg to the Norwegian fjords",
+    "subtitle": "Two weeks of ferries, fjords and a Swedish finish",
+    "startDate": "2027-06-19",
+    "places": [
+      { "id": "p_84ert1k1ms", "name": "Hamburg", "lat": 53.5511, "lng": 9.9937, "day": 0, "note": "Pick up the van…" }
+      // …
+    ],
+    "legs": [
+      { "id": "l_cz9a9k6ek4", "fromId": "p_pcs74crom2", "toId": "p_g37z1hltf7", "mode": "ferry", "via": [], "durationMin": 195, "label": "Car ferry" }
+      // legs[i] joins places[i] → places[i + 1]
+    ]
+  },
+  "routes": { "<leg id>": { "key": "…", "geometry": "<encoded polyline>", "distanceM": 338306, "durationS": 12885, "source": "osrm" } }
+}
+```
+
+- **Intent and derived data are kept apart.** `trip` is what you edit (places, legs, via points, days, notes). `routes` is an optional
+  cache of the road geometry, keyed by leg id; the app only trusts a cached route whose `key` matches the trip, otherwise it routes the leg
+  again. A file without `routes` opens fine and is routed on arrival.
+- **Days** are integers ≥ 0 on which a place is reached; they may be typed out of order (the app uses the running maximum).
+- **Versioning.** `version` is the file format version (currently `1`). Additive, optional fields do not bump it; a change that older
+  files cannot satisfy does, together with a migration in `src/lib/tripFile.ts`. A file with a *newer* version is refused with a message.
+- **Opening is forgiving**: invalid places are dropped, bad days rounded, unknown modes become `drive` and every repair is reported in a
+  toast; only data that cannot be a trip is rejected. A trip may have up to 500 places.
+
+## Sharing
+
+- **JSON file**: *File → Save as JSON* (`Ctrl+S`) downloads it, *File → Open trip file…* (`Ctrl+O`) or dropping the file on the page opens
+  it. The file carries the routes, so it opens instantly. This is the safest way to share a long trip.
+- **Share link**: *File → Copy share link* puts the whole trip, without its routes, compressed into the address
+  (`https://…/#trip=<data>`); whoever opens it gets the trip (and the routes are computed again). Very long links (over about 8 000
+  characters) may be cut off by chat apps, and the app says so.
+- **Presentation link**: *File → Copy presentation link* is the same with `&present` appended: it opens in presentation mode, with no
+  editing tools. `?present` in the address does the same for the trip already in the browser, and `?src=…&present` for a trip file.
+- **`?src=<url>`**: opens a trip file from a web address, for example one published as a GitHub gist or next to the app
+  (`https://…/?src=https://example.org/my.trip.json`, or relative to the page: `?src=samples/my.trip.json`). The server has to allow
+  cross-origin reads (CORS); only `http` and `https` are fetched.
+
+Whatever a link or file *replaces* is not lost: the previous trip goes to **File → Recent trips…** (the last five).
+
+## Development
+
+You need [Node.js](https://nodejs.org/) 20.19 or newer (22 recommended).
+
+```sh
+npm ci                  # install
+npm run dev             # dev server at http://localhost:5173 (npm run dev -- --port 5300 for another port)
+npm run typecheck       # tsc -b (app, tooling and tests)
+npm run lint            # oxlint
+npm test                # Vitest: the pure logic (src/**/*.test.ts)
+npm run e2e             # Playwright: the whole UI against mocked tile/routing/search servers (E2E_PORT=5300 to pick a port)
+npm run build           # type-check and build into dist/
+npm run preview         # serve dist/
+```
+
+- The e2e specs never touch the public servers: `e2e/fixtures.ts` mocks OSM tiles, OSRM and Nominatim and fails any other external
+  request. `E2E_REAL_NETWORK=1 npm run e2e` turns the mocks off (use it sparingly, see below). One spec builds the app for a sub-path and
+  checks it works there.
+- In dev builds `window.__ROADMAP__` exposes the stores and the Leaflet map for tests and for poking around in the console; a component
+  gallery is served at `/ui-kit.html`.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** describes the structure (stores, map layers, routing, the data model) and keeps a log of every
+  feature with its decisions and known gaps: read it before changing anything.
+
+Built with Vite, React, TypeScript, Leaflet, Zustand (with undo/redo), dnd-kit and a handful of small libraries; see the table in
+ARCHITECTURE.md.
+
+## External services
+
+The app calls three public, community-run services directly from the browser. They are free and shared: please keep it that way. Their
+base URLs are constants in [`src/services/config.ts`](src/services/config.ts), so you can point the app at your own instance (or another
+tile provider) by editing that file and rebuilding.
+
+| Service | Used for | Policy and what the app does |
+| --- | --- | --- |
+| **OpenStreetMap tiles**, `tile.openstreetmap.org` | The map (and the exported image) | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): visible attribution (always shown on the map and in exports), no bulk downloading (an image export fetches only the tiles of its own picture, at most 300 and six at a time, and keeps them in memory), and no heavy use: a busy site should use its own tile server or a commercial provider and change `TILE_URL`. |
+| **OSRM demo server**, `router.project-osrm.org` | Road routes between places | [Demo server policy](https://github.com/Project-OSRM/osrm-backend/wiki/Demo-server): light use only, no guarantees. The app sends at most one request at a time and one per second, never repeats a request (results are cached and saved with the trip) and does not retry in a loop: a failed leg shows a *Retry* button. For regular use run your own [OSRM](https://github.com/Project-OSRM/osrm-backend) (`OSRM_URL`, driving profile). |
+| **Nominatim**, `nominatim.openstreetmap.org` | Place search and naming dropped pins | [Usage policy](https://operations.osmfoundation.org/policies/nominatim/): at most one request per second, no search-as-you-type, cache results, identify the application. The app searches only on Enter or the search button, queues requests one per second, caches answers and sends the browser's own `Referer`. Self-host it or use a geocoding service with a compatible `/search` and `/reverse` API (`NOMINATIM_URL`) for more. |
+
+A trip file, a share link and the sample trip need none of these to *open* (routes travel with a file); only editing a route or searching
+does. Country boundaries and flags are bundled with the app. If you host a public copy, make sure its traffic stays within these policies.
+
+## Hosting
+
+Roadmap Overview is a static site: `npm run build` writes everything to `dist/`, which any static file host can serve (no server code, no
+client-side routes, so no fallback rules are needed). At the root of a domain nothing needs configuring.
+
+### Under a sub-path (GitHub Pages)
+
+A project site on GitHub Pages lives at `https://<user>.github.io/<repository>/`. Build with that path as the base so every script, style,
+flag and sample file is requested from there:
+
+```sh
+BASE_PATH=/<repository>/ npm run build      # or: npm run build -- --base=/<repository>/
+npx vite preview --base=/<repository>/      # check it locally at http://localhost:4173/<repository>/
+```
+
+Share links keep the sub-path, and `?src=` addresses are relative to the page. To publish with GitHub Actions: in the repository's
+*Settings → Pages* choose **GitHub Actions** as the source, then add `.github/workflows/pages.yml`:
+
+```yaml
+name: Pages
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
+```
+
+For a site served from your own domain's root (or a user page, `https://<user>.github.io/`), leave `BASE_PATH` out.

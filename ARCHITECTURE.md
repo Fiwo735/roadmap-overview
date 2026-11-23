@@ -26,16 +26,20 @@ geocoding are called directly from the client.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ TopBar: logo · trip title (inline edit) · undo/redo · Ride · Image · File · theme │
+│ TopBar: logo · trip title · undo/redo · Ride · Image · File · present · help · theme │
 ├───────────────┬──────────────────────────────────────────────────────────┤
 │ Sidebar       │ Map                                                      │
 │  Places list  │  ┌ title + stats card (top-left)     map tools (top-right)┐│
 │  (sortable,   │  │                                                       ││
 │  day field,   │  │        markers, route, via handles, ride van          ││
 │  leg rows     │  │                                                       ││
-│  between)     │  └ scale (bottom-left)   ride HUD (bottom-centre)   zoom/attrib┘│
+│  between)     │  └ scale · legend (bottom-left)   toasts + ride HUD (bottom-centre)   zoom/attrib┘│
 └───────────────┴──────────────────────────────────────────────────────────┘
 ```
+
+Below 600 px the top bar folds undo/redo, presentation mode, help and the theme into a "⋯" menu
+(`layout/TopBarOverflow`); in presentation mode (F8) the sidebar and the editing buttons are gone and the
+map takes the whole width.
 
 The light/dark theme applies to everything **except the map tiles**, which always use the
 standard OSM style. Our own overlays on the map (cards, HUD, menus) do follow the theme.
@@ -56,7 +60,8 @@ src/
                              insert index, via-point index), simplify (Douglas–Peucker),
                              manualRoute (routes that need no router), greatCircle (flight arcs),
                              routeSpans (ferry stretches from OSRM steps), legModes / legBadges (legend and badge placement),
-                             shareLink (`#trip=` links), tripFileIo (file names, pretty JSON, text → TripFile)
+                             shareLink (`#trip=` links, the `present` flag), tripFileIo (file names, pretty JSON, text → TripFile),
+                             assetUrl (root-relative URLs under the app's base path),
                              loadImage (an <img> loaded off-page, for canvases)
   services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs, sample trip), nominatim.ts, osrm.ts,
                              tripSource.ts (trip files from `?src=` and the sample), tiles.ts (the image export's
@@ -64,11 +69,11 @@ src/
   store/                     tripStore (undoable intent), uiStore, routeStore, persistence
   components/                shared UI primitives: Button, IconButton (+Tooltip), Menu, Dialog,
                              ContextMenu (a Menu opened at a point), Toast (+ the `toast` API in
-                             toast.ts), Spinner, SegmentedControl, Switch, portal.ts (portal target
-                             and modal stack)
+                             toast.ts), Spinner, SegmentedControl, Switch, useMediaQuery, portal.ts
+                             (portal target, modal stack, the map's toast dock)
   features/<name>/           one folder per feature:
-    layout/                  TopBar, Sidebar, TripTitle, UndoRedoButtons, shortcuts, Logo
-    map/                     MapView, panes, mapInstance (getMap/useLeafletMap), view helpers
+    layout/                  TopBar (+ TopBarOverflow on phones), Sidebar, TripTitle, UndoRedoButtons, shortcuts, Logo
+    map/                     MapView, panes, paneLock, mapInstance (getMap/useLeafletMap), view helpers
     theme/                   ThemeToggle, theme.ts (init/choose)
     places/                  PlacesPanel (sortable list, search), PlacesLayer (markers, context menus)
     legs/                    LegConnector (between place rows: leg summary + the selected leg's LegEditor),
@@ -77,11 +82,14 @@ src/
                              RouteLayer + reshape (lines, via points, Google-Maps-style reshaping), MapTools
     stats/                   title/statistics card (StatsOverlay → TripCard | TripPill), computeStats,
                              countries (+ countryIndex, worldIndex, countryData), flags, dateRange, samplePath
-    io/                      FileMenu (top bar), import/export actions, drop overlay, start-up links (F5)
+    io/                      FileMenu (top bar), import/export actions, drop overlay, start-up links (F5), cross-tab sync (F8)
     ride/                    RideButton, RideHud (day, leg, controls), RideLayer + rideScene (van, trail, camera),
                              rideStore (playback + controls), timeline (the pure ride clock), camera, vehicles
     export-image/            image export (F7): ExportImageButton → ExportDialog, the canvas renderer
                              (renderTripImage + geometry, card, legend, labelPlacement, paint, …)
+    help/                    HelpDialog (how-tos + the shortcut table in `shortcutList.ts`), HelpButton, `?` key
+                             (`helpActions`), WelcomeHint (first-visit card, `welcomeStore`) (F8)
+    presentation/            presentationStore, PresentationButton (+ `usePresentationKeys`), PresentationLayer (F8)
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
@@ -93,7 +101,7 @@ folders. Slots and where they render:
 
 | Placeholder | Slot |
 | --- | --- |
-| `ride/RideButton`, `export-image/ExportImageButton`, `io/FileMenu` | top bar, right side (before the theme toggle) |
+| `ride/RideButton`, `export-image/ExportImageButton`, `io/FileMenu` | top bar, right side (between undo/redo and the presentation, help and theme buttons) |
 | `places/PlacesPanel` | sidebar content (renders `legs/LegConnector` between its rows) |
 | `stats/StatsOverlay` | map overlay, top-left |
 | `routing/MapTools` | map overlay, top-right |
@@ -221,6 +229,9 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
   `app.addPlaces('Lyon', 'Annecy')`, `app.seedSavedTrip(file)`, `app.mapView()`, …). Prefer it
   over clicking through the UI when the UI is not what you are testing.
 - Specs for shared components run against the dev-only `/ui-kit.html` page (`src/dev/UiKit.tsx`).
+- Every test starts as a *returning visitor* (the auto-fixture `returningVisitor` stores the "welcome seen" flag), so the
+  first-visit hint (F8) does not sit on the map; `test.use({ welcomeHint: true })` opts in. `e2e/subpath.spec.ts` builds the
+  app with `--base=/roadmap-overview/` into `node_modules/.cache/e2e-subpath` (about 10 s) and serves it through page routes.
 - Visual verification uses real tiles/routing/search through a dev server and screenshots.
   Chromium reaches the internet through the sandbox proxy: launch it with
   `proxy: { server: process.env.HTTPS_PROXY, bypass: 'localhost,127.0.0.1' }`.
@@ -285,9 +296,8 @@ Each feature appends a short entry here: what it added, where it lives, anything
   (999.6 m → "1 km").
 - **Tests**: Vitest covers lib, stores and persistence; Playwright covers the shell, theme, title,
   undo/redo, autosave, mobile layout, the mocks themselves and the shared components.
-- **Known gaps**: two open tabs overwrite each other's autosave (last write wins; no
-  cross-tab sync or warning; planned for F8); the top bar
-  has no overflow strategy for the later Ride/Image/File buttons on phones (F8).
+- **Known gaps** (both closed in F8): two open tabs overwrote each other's autosave (now `io/crossTab.ts`); the
+  top bar had no overflow strategy on phones (now `layout/TopBarOverflow`).
 
 ### F1 — places list, search, day field, labelled markers
 
@@ -586,7 +596,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   and per `LegRoute` object (WeakMap). Measured: a 5 037 km route of 16 791 points takes ~35 ms the
   first time, 0.02 ms again; building the index ~26 ms. Known limit: the 50 m borders are ~1 km off,
   so a road hugging a border for ≥ 6 km can add the neighbour.
-- **Flags**: `flagUrl(code)` → `/flags/<code>.svg` (4:3 SVG, no width/height of their own: size the
+- **Flags**: `flagUrl(code)` → `<base>/flags/<code>.svg` (`lib/assetUrl.ts`; 4:3 SVG, no width/height of their own: size the
   `<img>`/canvas draw yourself) or null. `vite.config.ts` has a small plugin that serves them from
   `node_modules/flag-icons` in dev and copies all 271 into the build (letting the bundler handle them
   inlined the small ones into the JavaScript); a flag is only fetched when displayed. Each flag in the
@@ -765,8 +775,8 @@ Each feature appends a short entry here: what it added, where it lives, anything
   right-clicked and no handle appears on a line; `PlacesPanel` sets `inert` on the whole list (rows, day
   fields, menus, leg editor, search box); `PlacesLayer` ignores the map's right-click; undo/redo buttons and
   shortcuts are off; the top-bar trip title is `readOnly`. All of these ask **`isEditingLocked()`** (event
-  handlers) or **`useEditingLocked()`** (components), exported from `ride/rideStore.ts`: true exactly while a
-  ride is on. **Any surface that edits the trip — including ones added later, such as the map's title card
+  handlers) or **`useEditingLocked()`** (components), exported from `ride/rideStore.ts`: true while a
+  ride is on **or presentation mode is** (F8). **Any surface that edits the trip — including ones added later, such as the map's title card
   or file actions — must consult it** (disable the control or make the field read-only) rather than
   look at ride internals. Any trip change that still gets through is handled by the rebuild/close rule above.
 - **Map** (`rideScene.ts`, mounted by `RideLayer` only while a ride is on; `destroy()` restores the view, the
@@ -804,7 +814,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   buttons and while a dialog is open. Holding the scrubber pauses; letting go resumes, wherever the pointer is then (the release is listened
   for on `window`, so a drag that ends over the map or the sidebar still resumes). Below 768 px the
   zoom control is hidden while the HUD is up and the Ride button is icon-only; the leg legend is hidden
-  below 1260 px. There is no `backdrop-filter` on the HUD: it made every frame of the ride pay for a blur
+  below 1420 px (F8, was 1260: so the legend never sits under the 680 px controls). There is no `backdrop-filter` on the HUD: it made every frame of the ride pay for a blur
   in software rendering.
 - **Shared-code changes**: `lib/geo.ts` exports `mercatorY` / `latFromMercatorY` / `MAX_MERCATOR_LAT`;
   `panes.ts` has the `rideTrail` and `rideStops` panes; `PlacesPanel`, `PlaceRow`, `PlacesLayer`,
@@ -822,8 +832,8 @@ Each feature appends a short entry here: what it added, where it lives, anything
   reduced motion.
 - **Known gaps**: the van moves at a constant speed through its day's slot, so leg durations (user overrides,
   ferry times) do not shape the timing; a rest day is always the van parked (also after a flight or a
-  train); opening a file while a ride runs rebuilds or ends it by the rule above (the file feature can call
-  `closeRide()` first for a cleaner hand-over); the per-frame trail clip is O(points of the current leg).
+  train); a trip that arrives while a ride runs (a pasted link) rebuilds or ends it by the rule above (F8: the File menu's
+  replacing actions, `Ctrl+O` and file drops are locked during a ride now, as in presentation mode); the per-frame trail clip is O(points of the current leg).
 
 ### F7 — image export: a PNG of the map with the travel
 
@@ -904,3 +914,95 @@ Each feature appends a short entry here: what it added, where it lives, anything
   2× A4 is a 35-megapixel canvas, which iOS Safari refuses (the dialog warns up front and says so on failure); the legend does not list the
   dotted "straight line" drive style (as on the map); text is set in Inter only, so scripts it lacks fall back to the system
   font; the card cannot be moved to another corner.
+
+### F8 — polish: help, presentation mode, notes, toasts, other-tab saves, phones, sub-path hosting, README
+
+- **Help** (`features/help/`): the top bar's "?" button and the `?` key (`useHelpKey`, mounted in `App`) open `HelpDialog`
+  (`ui.openDialogId === 'help'`, so the phone overflow menu and the welcome card open it the same way via `openHelp()`): four short
+  how-tos (places, routes, showing a trip, saving/sharing) and the shortcut tables. **`shortcutList.ts` is the one list of keys the
+  app has** — a new shortcut must be added there (`shortcutList.test.ts`, `help.spec.ts`). Single-key shortcuts (`?`, `P`) go
+  through `plainKeyAllowed(e)` in `layout/shortcuts.ts`: not with Ctrl/Cmd/Alt, not while a dialog is open, not in a text field or a
+  menu (type-ahead). **First-visit hint** (`WelcomeHint`, a card in the new `map-slot--center`): shown for an empty trip until
+  dismissed; `localStorage["roadmap-overview:welcome-seen"]` is also set the moment a trip has places (restored, opened, built), so
+  it never returns for anyone who has used the app.
+- **Presentation mode** (`features/presentation/`): `usePresentationStore.on` (not undoable, not saved). It is a second reason for
+  **`isEditingLocked()` / `useEditingLocked()`** (now `ride active || presenting`), so everything F6 locked is locked here too, plus
+  what F6 had left open: `PlacesLayer` ignores the right-click on a marker as well and disables marker dragging (`dragging.disable()`;
+  markers stay hoverable on purpose, so their notes show), `PresentationLayer` makes the route, via and badge panes `inert` through
+  `map/paneLock.ts` (a lock with owners — the ride and presentation may hold the same pane; the ride's scene was changed to use it)
+  and hides the via handles (`.is-presenting`), `reshape.hover` checks the lock, the card hides "Add a subtitle" / "Add dates" while
+  locked, and **opening another trip is locked too**: File → New trip / Open / Sample / Recent are disabled, `Ctrl+O` and file drops do
+  nothing (a drop says why), Help's "Load the sample trip" is disabled. Save, Copy share link and Copy presentation link stay. The
+  sidebar and undo/redo are hidden by `.app[data-presenting]` (`layout.css`); the map is fitted again after the layout change
+  (`PresentationLayer`, not during a ride). Keys: `P` toggles, Escape leaves (after the ride's own Escape, which stops propagation
+  first; not from a text field; from the read-only title it does). **Address**: `?present` (also `?present=1`; `=0`/`=false` are off)
+  or `&present` after a `#trip=` hash (`wantsPresentation` in `lib/shareLink.ts`; the payload alphabet has no `&`) enters it in
+  `openTripFromAddress`, before the first render; because the hash is removed after opening, a share link's wish is kept as
+  `?present`, and leaving the mode removes it, so a reload presents again exactly while the mode is on. `buildShareUrl(file, url,
+  { present: true })` and File → Copy presentation link make the `&present` form.
+- **Notes**: `PlaceNote` (a textarea in the expanded row under the search; draft locally, one `updatePlace` on blur, empty/space-only
+  removes the note, Escape discards and closes the row, a draft whose saved note changed underneath — undo — is dropped, a row
+  that collapses with a draft saves it; at most 1000 characters). A note shows as a small icon on its row (`place-note-indicator`,
+  the note as its `title`) and **in the marker's label**: the permanent label is a name plus a `.place-label__note` that CSS shows
+  only while the label is hovered or selected (`is-hovered`/`is-selected`), turning the pill into a card; the marker's aria-label
+  includes the note. (There is no second Leaflet tooltip: a marker has one, and it already is the label.)
+- **Toasts** (`components/Toast.tsx`, `portal.ts`, `map/MapOverlays.tsx`): on screens ≥ 768 px the toast region is portalled into a
+  **toast dock** — the first child of the bottom-centre map slot, i.e. stacked directly above the ride controls, clear of the title
+  card (top-left), the map tools (top-right) and the legend (bottom-left). Inside an open dialog it still goes into the dialog; on
+  phones (and where there is no map: the UI kit page) it stays fixed to the window at the bottom, lifted above a running ride's controls
+  (`body:has(.ride-hud)`). Toasts gained `secondaryAction`, `dismissible: false` (a decision toast: no X, pair with `duration: 0`) and
+  `blockedBy` on an action: asked at click time, it returns a sentence when the action cannot run now (the toast stays, the sentence is shown
+  as a toast). **Every toast action that changes the trip uses `blockedBy: editingLockedReason`** (`ride/rideStore.ts`: "Leave presentation
+  mode (Esc) first…", "Close the ride (Esc) first…"): the Undo of New trip / open / restore / load, "Restore previous trip", "Open linked trip
+  (anyway)", cross-tab "Load it" — a toast outlives the moment it was made, and the lock may have begun since.
+  `components/useMediaQuery.ts` is the small hook behind the width switch.
+- **Durations** are always hours: `formatDuration` gives "34 h 28 min", "1 234 h", never days (the one function every place uses,
+  also the leg editor's hint and the stats tooltips; the "Days" tile is a count of calendar days and is unchanged).
+- **Other tabs** (`features/io/crossTab.ts`, started by `bootstrap()`): the `storage` event (it only reaches the *other* tabs) for the
+  autosave key. A stored trip whose `tripFingerprint` differs from the open one holds this tab's autosave
+  (`holdAutosave()` / `releaseAutosave(save)` in `store/persistence.ts`: nothing is written, also not on page hide) and shows a
+  toast "This trip was changed in another tab." with **Load it** (keeps this tab's trip in Recent trips, `installTrip` the stored one,
+  one undo step, "Undo" toast) and **Keep mine** (release and save now). It has no dismiss button, because the hold lasts until the
+  choice; further saves from the other tab change nothing visible (Load reads the stored trip when clicked), a toast pushed out of the
+  queue is shown again, and equal trips (the other tab undid, or loaded ours) or unreadable data resolve or ignore it. Routes that
+  arrive later do not matter: only the trip is compared. After "Keep mine" the *other* tab is the one asked. **While editing is locked** (ride,
+  presentation) the question is not asked: the hold starts at once, a toast that is up goes away when a lock begins, and the question comes
+  when it ends (`consider(readStoredTrip())`, so it reflects what is stored then). **Leaving**: while the question stands this tab's trip
+  exists only in memory, so on `pagehide` / the tab being hidden it is pushed to Recent trips (`keepOpenTrip`; a trip equal to the stored
+  one is not). "Load it" goes through `replaceOpenTrip` (exported from `io/importTrip.ts`), i.e. the same "no room to keep a copy →
+  ask first" confirm as every other replacement; Cancel brings the question back.
+- **Phones** (below 600 px, `layout.css`): `.topbar__collapsible` (undo/redo, the divider, presentation, help, theme) is hidden and
+  `TopBarOverflow` ("⋯", a `Menu`) offers Undo, Redo, Presentation mode / Leave presentation mode, Help and the theme switch; the
+  bar keeps the places button, the title, Ride, Image (F7's slot) and File. Below 500 px the logo is hidden to leave room for the
+  title; below 1024 px the brand name is. The top bar is tested at 768, 900 and 1024 px and at 390 px. F7's Export image button stays in the bar on phones (nothing sticks
+  out at 390, 360 or 320 px, with touch's 40 px buttons too) and in presentation mode: showing the trip as a picture is not editing.
+  `.menu__shortcut` hints are hidden on coarse pointers (`Menu.css`); the first-visit card says "long-press on a phone".
+- **Hosting under a sub-path**: `vite.config.ts` `base` comes from `BASE_PATH` (`/` by default; slashes are added) or `--base`; the
+  flag plugin's dev middleware honours it. `lib/assetUrl.ts` (`assetUrl(path)`, `import.meta.env.BASE_URL`) is the one way to write a
+  root-relative URL: used by `flagUrl` and `SAMPLE_TRIP_URL`; `index.html`'s favicon is rewritten by Vite; share links keep
+  `location.pathname`; `?src=` is resolved against the page. `e2e/subpath.spec.ts` guards it (build, files found, no request outside
+  the base, flags loaded, sample, share and presentation links, `?src=`).
+- **README.md** (new): what it is, features with how-tos (the Image export section follows F7's dialog), shortcuts, the trip file format,
+  sharing, development, the external services' policies and how to re-point them, hosting incl. a GitHub Pages workflow. Screenshots live in `docs/screenshots/`
+  (made from the sample trip with real tiles at 1280×800 CSS px, device scale factor 2, then resized to 1600 px and reduced to a
+  256-colour palette to stay below 500 kB each); `exported-image.jpg` is a real export of the sample trip (Landscape 1920 × 1080,
+  downscaled to 1440 × 810 — made from the merged app, so its card says "34 h 28 min").
+- **Small things**: the ride's legend is hidden below 1420 px (was 1260: at 1280 it sat under the controls); `TripCard`/`StartDate`
+  render no prompts while editing is locked (also during a ride). **The title card folds into its pill while a ride runs** when the map
+  is narrower than 760 px (a window under about 1100 px: the card would cover the trip) or too short for the card above the ride
+  controls (`stats/useFoldedByRide.ts`: card height measured, the controls' height measured, both from the map area); it comes back
+  when the ride closes or the window grows, and the user's own folding (`statsCardStore`) is untouched.
+- **Tests**: Vitest for `formatDuration` (hours), `assetUrl`, the presentation flag in `shareLink`, `presentationStore`, `paneLock`,
+  `shortcutList` and the autosave hold. Playwright (mocked): `help.spec.ts` (dialog, keys, hint, phone), `presentation.spec.ts`
+  (toggle, `P`/Escape, `?present`, `&present` links, pasted link, presentation link round trip, everything that must not be editable,
+  notes on hover, ride interplay, phone), `notes.spec.ts`, `crossTab.spec.ts` (two pages of one context), `toasts.spec.ts`
+  (placement against the card, tools, ride controls, phone), `toastLock.spec.ts` (toast actions and the lock), `rideCard.spec.ts` (the card
+  and the ride controls at many window sizes), `subpath.spec.ts`, and the top bar in `shell.spec.ts`. **Two races found in older
+  specs**: Playwright switches file-chooser interception on asynchronously when a `filechooser` listener is added, so a listener added in
+  the same breath as `Ctrl+O` can miss the chooser (register it first: `io.spec.ts`; reproduced 3 in 25 under load); and dnd-kit's
+  KeyboardSensor listens for arrow/drop keys from a `setTimeout` after the pick-up, so the first ArrowDown can be lost although the
+  pick-up is already announced (`places.spec.ts` sends it until dnd-kit shows it took it).
+- **Known gaps**: the other-tab check compares trips only when a `storage` event arrives (a tab that was asleep sees the toast on its next
+  event, not before); two tabs editing the same trip alternately will keep asking each other; presentation mode refits the map when
+  toggled, so a hand-made view is not kept; the README screenshots are static and will age with the UI.
+

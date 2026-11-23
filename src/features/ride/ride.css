@@ -467,7 +467,8 @@
 
 /* ---- Make room: on a narrower window the ride controls take the corner's other overlays' place ----- */
 
-@media (max-width: 1260px) {
+/* (1420: the controls are 680 px wide and centred on the map, which is 360 px narrower than the window.) */
+@media (max-width: 1420px) {
   .map-area:has(.ride-hud) .map-slot--bottom-left {
     display: none;
   }

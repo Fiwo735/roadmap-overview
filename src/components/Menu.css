@@ -69,6 +69,13 @@
   font-size: var(--text-xs);
 }
 
+/* Touch screens have no keyboard to press them on: the hints would only be clutter. */
+@media (pointer: coarse) {
+  .menu__shortcut {
+    display: none;
+  }
+}
+
 .menu__separator {
   height: 1px;
   margin: var(--space-1) var(--space-2);

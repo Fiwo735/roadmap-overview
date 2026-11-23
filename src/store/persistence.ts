@@ -50,6 +50,22 @@ export function restoreSavedTrip(): RestoreResult {
   return 'restored'
 }
 
+// While another tab's version of the trip waits for the user's decision (features/io/crossTab.ts) our own
+// saves must not overwrite it: they are held, and the decision releases them.
+let held = false
+let saveNow: (() => void) | null = null
+
+/** Stop writing the autosave until `releaseAutosave`: another tab saved a trip and the user has yet to choose. */
+export function holdAutosave(): void {
+  held = true
+}
+
+/** Autosave may write again; with `save` it writes the open trip at once (it wins over what is stored). */
+export function releaseAutosave(save: boolean): void {
+  held = false
+  if (save) saveNow?.()
+}
+
 /** After a failed save, wait at least this long before trying (and serialising) again. */
 const FAILURE_BACKOFF_MS = 30_000
 
@@ -82,7 +98,7 @@ export function startAutosave(delayMs = 500): () => void {
   const save = () => {
     timer = undefined
     const storage = getStorage()
-    if (!storage) return
+    if (!storage || held) return
     if (Date.now() < retryAt) {
       timer = setTimeout(save, retryAt - Date.now())
       return
@@ -117,6 +133,11 @@ export function startAutosave(delayMs = 500): () => void {
   const onVisibility = () => {
     if (document.visibilityState === 'hidden') flush()
   }
+  saveNow = () => {
+    if (timer !== undefined) clearTimeout(timer)
+    retryAt = 0
+    save()
+  }
 
   const unsubTrip = useTripStore.subscribe((s, prev) => {
     if (s.trip !== prev.trip) schedule()
@@ -128,6 +149,8 @@ export function startAutosave(delayMs = 500): () => void {
   document.addEventListener('visibilitychange', onVisibility)
 
   return () => {
+    saveNow = null
+    held = false
     unsubTrip()
     unsubRoutes()
     window.removeEventListener('pagehide', flush)

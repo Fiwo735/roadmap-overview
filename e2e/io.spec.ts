@@ -81,13 +81,16 @@ test.describe('save and open', () => {
     await openRoutedTrip(page, app, 'Lyon', 'Annecy')
     await page.getByRole('textbox', { name: /trip title/i }).fill('Typed, not committed')
 
+    // Playwright only intercepts the file chooser once a listener has been registered, and does so
+    // asynchronously: a listener added in the same breath as the key press can lose that race (the chooser
+    // then opens natively and no event comes). So the listener is registered well before Ctrl+O.
+    const choosing = page.waitForEvent('filechooser')
     // What was typed is saved even though Enter was never pressed.
     const downloading = page.waitForEvent('download')
     await page.keyboard.press('Control+s')
     expect((await downloading).suggestedFilename()).toBe('typed-not-committed.trip.json')
     expect((await app.trip()).title).toBe('Typed, not committed')
 
-    const choosing = page.waitForEvent('filechooser')
     await page.keyboard.press('Control+o')
     const chooser = await choosing
     expect(chooser.isMultiple()).toBe(false)

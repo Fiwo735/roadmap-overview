@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 import { useTripStore } from '../../store/tripStore'
 import { useStatsCardStore } from './statsCardStore'
+import { useFoldedByRide } from './useFoldedByRide'
 import { TripCard } from './TripCard'
 import './stats.css'
 
@@ -26,5 +27,7 @@ function TripPill() {
 // Map overlay (top-left): the trip's title and statistics card (feature F4).
 export function StatsOverlay() {
   const collapsed = useStatsCardStore((s) => s.collapsed)
-  return collapsed ? <TripPill /> : <TripCard />
+  // Out of the way of the ride controls on a short map (F8); the user's own choice is untouched.
+  const foldedByRide = useFoldedByRide()
+  return collapsed || foldedByRide ? <TripPill /> : <TripCard />
 }

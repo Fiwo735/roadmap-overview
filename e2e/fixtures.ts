@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   corrupt: 'roadmap-overview:v1:corrupt',
   recent: 'roadmap-overview:v1:recent',
   theme: 'roadmap-overview:theme',
+  welcomeSeen: 'roadmap-overview:welcome-seen',
 } as const
 
 export interface RecordedRequest {
@@ -366,7 +367,25 @@ export class App {
   }
 }
 
-export const test = base.extend<{ mocks: Mocks; app: App }>({
+export const test = base.extend<{ mocks: Mocks; app: App; welcomeHint: boolean; returningVisitor: void }>({
+  // The first-visit hint (F8) sits in the middle of an empty map and would be in the way of tests that click
+  // there: every test starts as a returning visitor, unless it opts in with `test.use({ welcomeHint: true })`.
+  welcomeHint: [false, { option: true }],
+  returningVisitor: [
+    async ({ context, welcomeHint }, use) => {
+      if (!welcomeHint) {
+        await context.addInitScript((key) => {
+          try {
+            localStorage.setItem(key, '1')
+          } catch {
+            // Opaque-origin documents (about:blank) have no storage.
+          }
+        }, STORAGE_KEYS.welcomeSeen)
+      }
+      await use()
+    },
+    { auto: true },
+  ],
   // Auto: every test gets the mocked services unless E2E_REAL_NETWORK=1.
   mocks: [
     async ({ context }, use) => {

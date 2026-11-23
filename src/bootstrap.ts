@@ -1,4 +1,5 @@
 import { toast } from './components/toast'
+import { startCrossTabSync } from './features/io/crossTab'
 import { openTripFromAddress } from './features/io/startup'
 import { getMap } from './features/map/mapInstance'
 import { initTheme } from './features/theme/theme'
@@ -34,6 +35,7 @@ export function bootstrap(): void {
     toast.error('Your last trip could not be restored, so a new one was started.')
   }
   startAutosave()
+  startCrossTabSync()
   keepSelectionValid()
   // After autosave started, so that a trip opened from the address is saved as the current one.
   openTripFromAddress()

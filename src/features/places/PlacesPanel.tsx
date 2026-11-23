@@ -99,7 +99,7 @@ export function PlacesPanel() {
           </span>
           <h3 className="empty-state__title">No stops yet</h3>
           <p className="empty-state__text">
-            Search for a place below to add your first stop, or right-click the map and choose “Add place here”.
+            Search for a place below to add your first stop, or right-click the map (long-press on a phone) and choose “Add place here”.
           </p>
           <Button variant="secondary" icon={<Sparkles size={16} />} onClick={() => void loadSampleTrip()} data-testid="load-sample">
             Load sample trip

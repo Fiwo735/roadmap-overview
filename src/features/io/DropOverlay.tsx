@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { FileDown } from 'lucide-react'
 import { toast } from '../../components/toast'
+import { isEditingLocked } from '../ride/rideStore'
 import { openTripFileFromDisk } from './importTrip'
 import './io.css'
 
@@ -20,17 +21,19 @@ export function DropOverlay() {
     // dragenter/dragleave also fire for every element the pointer crosses: count them.
     let depth = 0
     const modalOpen = () => document.querySelector('dialog[open]') !== null
+    // A dropped trip replaces this one: not while presenting or riding either (isEditingLocked).
+    const blocked = () => modalOpen() || isEditingLocked()
 
     const onEnter = (e: DragEvent) => {
       if (!carriesFiles(e)) return
       e.preventDefault()
       depth++
-      if (!modalOpen()) setActive(true)
+      if (!blocked()) setActive(true)
     }
     const onOver = (e: DragEvent) => {
       if (!carriesFiles(e)) return
       e.preventDefault()
-      if (e.dataTransfer) e.dataTransfer.dropEffect = modalOpen() ? 'none' : 'copy'
+      if (e.dataTransfer) e.dataTransfer.dropEffect = blocked() ? 'none' : 'copy'
     }
     // Not filtered on the drag's type: only file drags ever raised `depth`.
     const onLeave = () => {
@@ -44,6 +47,10 @@ export function DropOverlay() {
       depth = 0
       setActive(false)
       if (modalOpen()) return
+      if (isEditingLocked()) {
+        toast.info('Leave presentation mode or close the ride first, then drop the file again.')
+        return
+      }
       const files = Array.from(e.dataTransfer?.files ?? [])
       const file = files.find(looksLikeJson) ?? (files.length === 1 ? files[0] : undefined)
       if (file) void openTripFileFromDisk(file)

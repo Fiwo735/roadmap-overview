@@ -74,6 +74,49 @@
   gap: 2px;
 }
 
+/* Buttons that fold into the overflow menu on phones: their wrapper takes no box of its own on wide screens. */
+.topbar__collapsible {
+  display: contents;
+}
+
+.topbar__overflow {
+  display: none;
+}
+
+/* The brand name makes room for the title and the buttons on narrower laptops and tablets. */
+@media (max-width: 1023px) {
+  .brand__name {
+    display: none;
+  }
+}
+
+/* Small phones: the logo makes room for the title. */
+@media (max-width: 499px) {
+  .brand {
+    display: none;
+  }
+}
+
+/* Phones: undo/redo, presentation, help and theme live in the overflow menu (TopBarOverflow). */
+@media (max-width: 599px) {
+  .topbar__collapsible {
+    display: none;
+  }
+
+  .topbar__overflow {
+    display: inline-flex;
+  }
+}
+
+/* ---- Presentation mode (F8): no sidebar, no editing tools --------------------------------- */
+
+.app[data-presenting='true'] .sidebar,
+.app[data-presenting='true'] .sidebar-backdrop,
+.app[data-presenting='true'] .topbar__menu,
+.app[data-presenting='true'] .topbar__history {
+  display: none;
+}
+
 .trip-title {
   flex: 0 1 380px;
   min-width: 0;

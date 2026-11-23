@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { useRouteStore } from '../../store/routeStore'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
+import { isPresenting, usePresentationStore } from '../presentation/presentationStore'
 import { getLegRoutes, useLegRoutes, type LegRouteInfo } from '../routing/legRoutes'
 import {
   buildTimeline,
@@ -51,13 +52,31 @@ export const useRideStore = create<RideState>()(() => ({
 export const isRiding = (): boolean => useRideStore.getState().active
 
 /**
- * THE switch every editing surface consults: true while a ride is on. Anything that changes the trip
- * (marker drags, the places list, the leg editor, undo/redo, the title, map menus, …) must be off
- * while it is, because the ride is made from the trip as it was when it started. Use the hook in
- * components and `isEditingLocked()` in event handlers.
+ * THE switch every editing surface consults: true while a ride is on (the ride is made from the trip as
+ * it was when it started) and in presentation mode (F8: the trip is being shown, not edited). Anything
+ * that changes the trip (marker drags, the places list, the leg editor, undo/redo, the title, map menus,
+ * opening another trip, …) must be off while it is. Use the hook in components and `isEditingLocked()`
+ * in event handlers.
  */
-export const isEditingLocked = (): boolean => useRideStore.getState().active
-export const useEditingLocked = (): boolean => useRideStore((s) => s.active)
+export const isEditingLocked = (): boolean => useRideStore.getState().active || isPresenting()
+/**
+ * Why the trip cannot be changed right now, as a sentence for a toast, or null when it can. For actions that
+ * come back later and change the trip — an "Undo" on a toast that is still showing, "Load it" — which must
+ * check at click time: the lock may have begun since they were offered.
+ */
+export function editingLockedReason(): string | null {
+  const presenting = isPresenting()
+  const riding = useRideStore.getState().active
+  if (presenting && riding) return 'Leave presentation mode and close the ride (Esc twice) first, then try again.'
+  if (presenting) return 'Leave presentation mode (Esc) first, then try again.'
+  if (riding) return 'Close the ride (Esc) first, then try again.'
+  return null
+}
+export const useEditingLocked = (): boolean => {
+  const riding = useRideStore((s) => s.active)
+  const presenting = usePresentationStore((s) => s.on)
+  return riding || presenting
+}
 
 export const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true

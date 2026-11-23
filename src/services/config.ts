@@ -1,3 +1,5 @@
+import { assetUrl } from '../lib/assetUrl'
+
 /** Base URLs of the external services. Point them elsewhere to use a self-hosted instance. */
 
 export const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -17,4 +19,4 @@ export const OSRM_URL = 'https://router.project-osrm.org'
 export const NOMINATIM_URL = 'https://nominatim.openstreetmap.org'
 
 /** The bundled sample trip (a static file in `public/samples/`, so it also opens offline once cached). */
-export const SAMPLE_TRIP_URL = `${import.meta.env.BASE_URL}samples/hamburg-fjords.trip.json`
+export const SAMPLE_TRIP_URL = assetUrl('samples/hamburg-fjords.trip.json')

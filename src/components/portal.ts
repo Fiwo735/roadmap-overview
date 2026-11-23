@@ -18,3 +18,12 @@ export const useModalStack = create<{
   add: (dialog) => set((s) => (s.stack.includes(dialog) ? s : { stack: [...s.stack, dialog] })),
   remove: (dialog) => set((s) => (s.stack.includes(dialog) ? { stack: s.stack.filter((d) => d !== dialog) } : s)),
 }))
+
+/**
+ * The slot on the map where toasts sit on wide screens (bottom-centre, above the ride controls), set by
+ * `features/map/MapOverlays.tsx`. Without one (the UI kit page, phones) the toast region is fixed to the window.
+ */
+export const useToastDock = create<{ el: HTMLElement | null; set: (el: HTMLElement | null) => void }>()((set) => ({
+  el: null,
+  set: (el) => set({ el }),
+}))

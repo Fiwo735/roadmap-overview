@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { isTextEntry } from '../layout/shortcuts'
+import { isEditingLocked } from '../ride/rideStore'
 import { saveTripFile } from './exportTrip'
 import { pickTripFile } from './filePicker'
 
@@ -20,7 +21,8 @@ export function useFileShortcuts(): void {
         // A field being edited (the title, a day) commits when it loses focus: save what the user typed.
         if (isTextEntry(e.target)) (e.target as HTMLElement).blur()
         saveTripFile()
-      } else {
+      } else if (!isEditingLocked()) {
+        // Opening another trip replaces this one: not while presenting or riding.
         pickTripFile()
       }
     }

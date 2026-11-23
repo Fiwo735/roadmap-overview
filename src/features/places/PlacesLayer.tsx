@@ -6,6 +6,7 @@ import { ContextMenu } from '../../components/ContextMenu'
 import type { MenuEntry } from '../../components/Menu'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
+import { usePresentationStore } from '../presentation/presentationStore'
 import { isEditingLocked } from '../ride/rideStore'
 import type { LatLng, Place } from '../../types/trip'
 import { PANES } from '../map/panes'
@@ -19,6 +20,7 @@ interface Entry {
   marker: Marker
   number: number
   name: string
+  note: string
   dragging: boolean
 }
 
@@ -40,10 +42,18 @@ function badgeIcon(number: number) {
   })
 }
 
-function labelContent(name: string): HTMLElement {
+/** The label beside a marker: the name, and the place's note below it, shown only while the label is hovered or selected (places.css). */
+function labelContent(name: string, note: string): HTMLElement {
   const el = document.createElement('span')
   el.textContent = displayName(name)
-  return el
+  if (!note) return el
+  const wrap = document.createElement('span')
+  const noteEl = document.createElement('span')
+  noteEl.className = 'place-label__note'
+  noteEl.textContent = note
+  el.className = 'place-label__name'
+  wrap.append(el, noteEl)
+  return wrap
 }
 
 function sameSpot(marker: Marker, place: Place): boolean {
@@ -73,6 +83,8 @@ function applyEmphasis(entries: Map<string, Entry>): void {
 export function PlacesLayer() {
   const map = useMap()
   const places = useTripStore((s) => s.trip.places)
+  // Presentation mode (F8): markers stay hoverable (their notes show) but cannot be moved.
+  const presenting = usePresentationStore((s) => s.on)
   const entries = useRef(new Map<string, Entry>())
   const [menu, setMenu] = useState<MapMenu | null>(null)
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -115,7 +127,7 @@ export function PlacesLayer() {
           keyboard: true,
           autoPan: true,
         })
-        m.bindTooltip(labelContent(place.name), {
+        m.bindTooltip(labelContent(place.name, place.note ?? ''), {
           permanent: true,
           direction: 'right',
           pane: PANES.labels,
@@ -123,7 +135,7 @@ export function PlacesLayer() {
           offset: [LABEL_OFFSET, 0],
           opacity: 1,
         })
-        const created: Entry = { marker: m, number, name: place.name, dragging: false }
+        const created: Entry = { marker: m, number, name: place.name, note: place.note ?? '', dragging: false }
         entry = created
         live.set(place.id, created)
         const id = place.id
@@ -152,9 +164,11 @@ export function PlacesLayer() {
           m.setLatLng([to.lat, to.lng])
           lookupName(id)
         })
-        m.on('contextmenu', (e: LeafletMouseEvent) =>
-          setMenu({ kind: 'marker', x: e.originalEvent.clientX, y: e.originalEvent.clientY, placeId: id }),
-        )
+        m.on('contextmenu', (e: LeafletMouseEvent) => {
+          // Rename and Delete are editing: not while editing is locked (presentation mode, F8).
+          if (isEditingLocked()) return
+          setMenu({ kind: 'marker', x: e.originalEvent.clientX, y: e.originalEvent.clientY, placeId: id })
+        })
         m.addTo(map)
       }
 
@@ -163,16 +177,23 @@ export function PlacesLayer() {
         entry.marker.setIcon(badgeIcon(number))
         entry.number = number
       }
-      if (entry.name !== place.name) {
-        entry.marker.setTooltipContent(labelContent(place.name))
+      const note = place.note ?? ''
+      if (entry.name !== place.name || entry.note !== note) {
+        entry.marker.setTooltipContent(labelContent(place.name, note))
         entry.name = place.name
+        entry.note = note
       }
+      if (presenting) entry.marker.dragging?.disable()
+      else entry.marker.dragging?.enable()
       const el = entry.marker.getElement()
-      el?.setAttribute('aria-label', `Place ${number}: ${displayName(place.name)}. Drag to move.`)
+      el?.setAttribute(
+        'aria-label',
+        `Place ${number}: ${displayName(place.name)}.${note ? ` Note: ${note}.` : ''}${presenting ? '' : ' Drag to move.'}`,
+      )
     })
     applyEmphasis(live)
     scheduleLabelLayout()
-  }, [map, places, scheduleLabelLayout])
+  }, [map, places, presenting, scheduleLabelLayout])
 
   useEffect(() => {
     const live = entries.current
