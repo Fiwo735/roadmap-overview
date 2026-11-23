@@ -1,0 +1,25 @@
+.spinner {
+  display: inline-flex;
+  line-height: 0;
+  color: currentColor;
+}
+
+.spinner svg {
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+.spinner__track {
+  stroke: currentColor;
+  opacity: 0.2;
+}
+
+.spinner__arc {
+  stroke: currentColor;
+  stroke-dasharray: 14 60;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}

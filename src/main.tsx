@@ -1,9 +1,15 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@fontsource-variable/inter'
+import './styles/tokens.css'
+import './styles/global.css'
+import { App } from './App'
+import { bootstrap } from './bootstrap'
 
-// Placeholder until the app shell lands; see ARCHITECTURE.md.
+bootstrap()
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <main>Roadmap Overview</main>
+    <App />
   </StrictMode>,
 )

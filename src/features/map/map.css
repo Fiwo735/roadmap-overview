@@ -1,0 +1,125 @@
+.map-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.map {
+  width: 100%;
+  height: 100%;
+  /* Keep Leaflet's internal z-indexes (up to 1000) below our overlays and the app chrome. */
+  isolation: isolate;
+  /* Shown while tiles load. Deliberately not themed: tiles are always the light OSM style. */
+  background: #e7e9ec;
+  font-family: var(--font-sans);
+}
+
+/* ---- Overlay slots ------------------------------------------------------------------------- */
+
+.map-overlays {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-map-overlay);
+  pointer-events: none;
+}
+
+.map-slot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: calc(100% - 2 * var(--space-3));
+}
+
+.map-slot > * {
+  pointer-events: auto;
+}
+
+.map-slot--top-left {
+  top: var(--space-3);
+  left: var(--space-3);
+  align-items: flex-start;
+}
+
+.map-slot--top-right {
+  top: var(--space-3);
+  right: var(--space-3);
+  align-items: flex-end;
+}
+
+.map-slot--bottom-center {
+  bottom: var(--space-5);
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+}
+
+/* ---- Leaflet controls follow the theme (tiles do not) --------------------------------------- */
+
+.leaflet-touch .leaflet-bar {
+  border: 0;
+}
+
+.leaflet-bar {
+  border: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.leaflet-bar a,
+.leaflet-touch .leaflet-bar a {
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+  background: var(--surface);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font: 500 20px/36px var(--font-sans);
+}
+
+.leaflet-bar a:last-child {
+  border-bottom: 0;
+}
+
+.leaflet-bar a:hover,
+.leaflet-bar a:focus-visible {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.leaflet-bar a.leaflet-disabled {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+.leaflet-bottom.leaflet-right .leaflet-control-zoom {
+  margin-right: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.leaflet-container .leaflet-control-attribution {
+  padding: 2px var(--space-2);
+  border-top-left-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  backdrop-filter: blur(4px);
+}
+
+.leaflet-container .leaflet-control-attribution a {
+  color: var(--accent-text);
+}
+
+.leaflet-control-scale-line {
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+.leaflet-bottom.leaflet-left .leaflet-control-scale {
+  margin-left: var(--space-3);
+  margin-bottom: var(--space-3);
+}

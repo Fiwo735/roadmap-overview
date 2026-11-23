@@ -1,0 +1,241 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app__body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- Top bar ------------------------------------------------------------------------------- */
+
+.topbar {
+  position: relative;
+  z-index: var(--z-topbar);
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--topbar-height);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.topbar__menu {
+  display: none;
+}
+
+.brand {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-1);
+}
+
+.brand__name {
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.logo {
+  flex: none;
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+}
+
+.topbar__divider {
+  flex: none;
+  width: 1px;
+  height: 24px;
+  margin: 0 var(--space-1);
+  background: var(--border);
+}
+
+.topbar__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.topbar__group {
+  display: flex;
+  gap: 2px;
+}
+
+.trip-title {
+  flex: 0 1 380px;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+.trip-title::placeholder {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.trip-title:hover {
+  background: var(--surface-2);
+}
+
+.trip-title:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+/* ---- Sidebar ------------------------------------------------------------------------------- */
+
+.sidebar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--sidebar-width);
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.sidebar__mobile-head {
+  display: none;
+}
+
+.sidebar__scroll {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+}
+
+.empty-state__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.empty-state__title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.empty-state__text {
+  max-width: 28ch;
+  color: var(--text-muted);
+}
+
+/* ---- Below 768px: sidebar becomes a slide-over --------------------------------------------- */
+
+@media (max-width: 767px) {
+  .topbar {
+    padding: 0 var(--space-2);
+  }
+
+  .topbar__menu {
+    display: inline-flex;
+  }
+
+  .brand__name,
+  .brand + .topbar__divider {
+    display: none;
+  }
+
+  .trip-title {
+    flex: 1 1 auto;
+  }
+
+  .sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: var(--z-sidebar);
+    width: min(var(--sidebar-width), calc(100vw - 48px));
+    border-right: 0;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 220ms var(--ease),
+      visibility 0s linear 220ms;
+  }
+
+  .sidebar[data-open='true'] {
+    transform: none;
+    visibility: visible;
+    transition: transform 220ms var(--ease);
+  }
+
+  .sidebar__mobile-head {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--space-2) var(--space-2) 0;
+  }
+
+  .sidebar__mobile-head + .sidebar__scroll {
+    padding-top: var(--space-2);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: calc(var(--z-sidebar) - 1);
+    background: var(--backdrop);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms var(--ease);
+  }
+
+  .sidebar-backdrop[data-open='true'] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.map-pane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
