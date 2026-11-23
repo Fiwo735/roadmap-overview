@@ -39,3 +39,21 @@ export function fitMapToPlaces(map: LeafletMap, places: readonly PlaceCoords[], 
   if ('bounds' in view) map.fitBounds(view.bounds, { ...view.boundsOptions, animate })
   else map.setView(view.center, view.zoom, { animate })
 }
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+/**
+ * Fly to `point`, ending at a zoom between `minZoom` (so a place is never left as a dot on a
+ * continent) and `maxZoom` (so a far-away pick does not land at street level); the current zoom
+ * is kept when it already lies in between. No animation when the user prefers reduced motion.
+ */
+export function flyToPoint(
+  map: LeafletMap,
+  point: { lat: number; lng: number },
+  { minZoom = 10, maxZoom = 14 }: { minZoom?: number; maxZoom?: number } = {},
+): void {
+  const zoom = Math.min(Math.max(map.getZoom(), minZoom), maxZoom)
+  if (prefersReducedMotion()) map.setView([point.lat, point.lng], zoom, { animate: false })
+  else map.flyTo([point.lat, point.lng], zoom, { duration: 0.9 })
+}

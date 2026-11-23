@@ -261,6 +261,22 @@ export function useHistory() {
   return { undo, redo, canUndo, canRedo }
 }
 
+/**
+ * Run `fn` without recording undo history: for machine-made follow-ups of a user gesture (e.g. a
+ * reverse-geocoded name arriving after a marker drop) that must not become an undo step of their own.
+ * Keep `fn` synchronous so no user edit slips into the window.
+ */
+export function withoutHistory(fn: () => void): void {
+  const temporal = useTripStore.temporal.getState()
+  const wasTracking = temporal.isTracking
+  temporal.pause()
+  try {
+    fn()
+  } finally {
+    if (wasTracking) useTripStore.temporal.getState().resume()
+  }
+}
+
 /** Forget undo/redo history (after restoring a saved trip on start-up). */
 export function clearHistory(): void {
   useTripStore.temporal.getState().clear()

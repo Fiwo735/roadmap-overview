@@ -139,6 +139,7 @@ type UiSnapshot = {
   selectedLegId: string | null
   hoveredLegId: string | null
   expandedPlaceId: string | null
+  renamingPlaceId: string | null
   openDialogId: string | null
 }
 
@@ -180,6 +181,7 @@ export class App {
         selectedLegId: s.selectedLegId,
         hoveredLegId: s.hoveredLegId,
         expandedPlaceId: s.expandedPlaceId,
+        renamingPlaceId: s.renamingPlaceId,
         openDialogId: s.openDialogId,
       }
     })

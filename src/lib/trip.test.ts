@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Leg } from '../types/trip'
-import { defaultDayAt, isCalendarDate, isLegMode, normalizeDay, syncLegs } from './trip'
+import { defaultDayAt, effectiveDays, isCalendarDate, isLegMode, normalizeDay, parseDay, syncLegs } from './trip'
 
 const place = (id: string, day = 0) => ({ id, day })
 const leg = (id: string, fromId: string, toId: string): Leg => ({ id, fromId, toId, mode: 'drive', via: [] })
@@ -22,6 +22,33 @@ describe('normalizeDay', () => {
   })
 })
 
+describe('parseDay', () => {
+  it.each([
+    ['0', 0],
+    ['7', 7],
+    [' 12 ', 12],
+    ['007', 7],
+    ['999999999999999', 999_999_999_999_999],
+  ])('accepts %j', (text, expected) => {
+    expect(parseDay(text)).toBe(expected)
+  })
+
+  it.each(['', ' ', 'abc', '-1', '+3', '2.5', '1e3', '3 days', '1000000000000000', '٣'])('rejects %j', (text) => {
+    expect(parseDay(text)).toBeNull()
+  })
+})
+
+describe('effectiveDays', () => {
+  it('never goes back in time', () => {
+    expect(effectiveDays([place('a', 5), place('b', 3), place('c', 4), place('d', 9), place('e', 0)])).toEqual([5, 5, 5, 9, 9])
+  })
+
+  it('is the typed days when they are in order, and empty for no places', () => {
+    expect(effectiveDays([place('a', 0), place('b', 1), place('c', 1)])).toEqual([0, 1, 1])
+    expect(effectiveDays([])).toEqual([])
+  })
+})
+
 describe('defaultDayAt', () => {
   it('is 0 for the first place and for inserts at the start', () => {
     expect(defaultDayAt([], 0)).toBe(0)
@@ -33,6 +60,16 @@ describe('defaultDayAt', () => {
     expect(defaultDayAt(places, 3)).toBe(6)
     expect(defaultDayAt(places, 1)).toBe(0)
     expect(defaultDayAt(places, 2)).toBe(2)
+  })
+
+  it('builds on the previous place\'s effective day, not its typed day', () => {
+    // Typed [0, 1, 0]: the third stop is effectively on day 1, so the next one is day 2.
+    const places = [place('a', 0), place('b', 1), place('c', 0)]
+    expect(defaultDayAt(places, 3)).toBe(2)
+    // Inserted after the out-of-order stop (before a later one) it shares that effective day (1), not its typed 0.
+    expect(defaultDayAt([...places, place('d', 4)], 3)).toBe(1)
+    // Inserted after the second stop (day 1), before the out-of-order one.
+    expect(defaultDayAt(places, 2)).toBe(1)
   })
 })
 

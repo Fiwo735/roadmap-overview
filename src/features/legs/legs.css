@@ -1,0 +1,16 @@
+/* The row above draws its badge at --place-axis from the left edge of the list (see places.css). */
+.leg-connector {
+  position: relative;
+  height: var(--leg-height, 20px);
+}
+
+.leg-connector::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: calc(var(--place-axis, 24px) - 1px);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--border-strong);
+}

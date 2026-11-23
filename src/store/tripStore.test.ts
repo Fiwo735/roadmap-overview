@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Trip } from '../types/trip'
 import { createTrip } from '../lib/trip'
-import { clearHistory, redo, undo, useTripStore } from './tripStore'
+import { clearHistory, redo, undo, useTripStore, withoutHistory } from './tripStore'
 
 const s = () => useTripStore.getState()
 const temporal = () => useTripStore.temporal.getState()
@@ -46,6 +46,16 @@ describe('places and the legs invariant', () => {
     const last = s().trip.places.at(-1)!.day
     s().addPlace(pt(7))
     expect(s().trip.places.at(-1)!.day).toBe(last + 1)
+  })
+
+  it('defaults from the previous place\'s effective day when days are out of order', () => {
+    const [, b, c] = seed(3) // days 0, 1, 2
+    s().updatePlace(c, { day: 0 }) // typed [0, 1, 0]: the last stop is effectively on day 1
+    s().addPlace(pt(3))
+    expect(s().trip.places.map((p) => p.day)).toEqual([0, 1, 0, 2])
+    s().addPlace(pt(4), 3) // between the out-of-order stop and the new last one
+    expect(s().trip.places.map((p) => p.day)).toEqual([0, 1, 0, 1, 2])
+    expect(b).toBeTruthy()
   })
 
   it('normalises an explicit day to an integer >= 0, using the default for a non-finite one', () => {
@@ -407,5 +417,39 @@ describe('undo / redo history', () => {
     expect(s().trip.places).toHaveLength(2)
     expect(s().trip.legs).toHaveLength(1)
     expectInvariant()
+  })
+})
+
+describe('withoutHistory', () => {
+  it('applies a follow-up change without adding an undo step, and tracking resumes afterwards', () => {
+    const [a] = seed(1)
+    const before = temporal().pastStates.length
+    s().updatePlace(a, { lat: 41, lng: 11 }) // the user's gesture: one step
+    withoutHistory(() => s().updatePlace(a, { name: 'Named later' })) // the machine's follow-up
+    expect(temporal().pastStates.length).toBe(before + 1)
+    expect(s().trip.places[0].name).toBe('Named later')
+    expect(temporal().isTracking).toBe(true)
+
+    // Undo goes back over the whole gesture; redo brings the follow-up back with it.
+    undo()
+    expect(s().trip.places[0]).toMatchObject({ name: 'P0', lat: 40 })
+    redo()
+    expect(s().trip.places[0]).toMatchObject({ name: 'Named later', lat: 41 })
+
+    s().updatePlace(a, { day: 5 })
+    expect(temporal().pastStates.length).toBe(before + 2)
+  })
+
+  it('resumes tracking even when the callback throws, and leaves a paused store paused', () => {
+    expect(() =>
+      withoutHistory(() => {
+        throw new Error('boom')
+      }),
+    ).toThrow('boom')
+    expect(temporal().isTracking).toBe(true)
+
+    temporal().pause()
+    withoutHistory(() => undefined)
+    expect(temporal().isTracking).toBe(false)
   })
 })

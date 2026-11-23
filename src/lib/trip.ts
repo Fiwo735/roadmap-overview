@@ -29,13 +29,34 @@ export function normalizeDay(day: unknown): number {
 }
 
 /**
- * Default `day` for a place inserted at `index` (see ARCHITECTURE.md "Days"): appended places
- * continue on the next day, places inserted in the middle share the previous place's day.
+ * Parse what the user typed into a day field: plain digits only (no sign, decimals or exponent),
+ * at most 15 of them. Returns null for anything else so the caller can revert.
+ */
+export function parseDay(text: string): number | null {
+  const t = text.trim()
+  return /^\d{1,15}$/.test(t) ? normalizeDay(Number(t)) : null
+}
+
+/**
+ * The day each place is effectively reached on (ARCHITECTURE.md "Days"): the typed day, but never
+ * earlier than the effective day of the place before it.
+ */
+export function effectiveDays(places: readonly Pick<Place, 'day'>[]): number[] {
+  const out: number[] = []
+  for (const [i, p] of places.entries()) out.push(i === 0 ? p.day : Math.max(p.day, out[i - 1]))
+  return out
+}
+
+/**
+ * Default `day` for a place inserted at `index` (see ARCHITECTURE.md "Days"), relative to the
+ * previous place's EFFECTIVE day (a stop typed out of order counts as the day it is raised to):
+ * appended places continue on the next day, places inserted in the middle share that day.
  */
 export function defaultDayAt(places: readonly Pick<Place, 'day'>[], index: number): number {
   if (places.length === 0 || index <= 0) return 0
-  const previous = places[Math.min(index, places.length) - 1]
-  return index >= places.length ? previous.day + 1 : previous.day
+  const before = Math.min(index, places.length)
+  const previous = effectiveDays(places.slice(0, before)).at(-1) as number
+  return index >= places.length ? previous + 1 : previous
 }
 
 /**

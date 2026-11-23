@@ -18,6 +18,7 @@ function keepSelectionValid(): void {
     if (ui.selectedPlaceId && !places.has(ui.selectedPlaceId)) next.selectedPlaceId = null
     if (ui.hoveredPlaceId && !places.has(ui.hoveredPlaceId)) next.hoveredPlaceId = null
     if (ui.expandedPlaceId && !places.has(ui.expandedPlaceId)) next.expandedPlaceId = null
+    if (ui.renamingPlaceId && !places.has(ui.renamingPlaceId)) next.renamingPlaceId = null
     if (ui.selectedLegId && !legs.has(ui.selectedLegId)) next.selectedLegId = null
     if (ui.hoveredLegId && !legs.has(ui.hoveredLegId)) next.hoveredLegId = null
     if (Object.keys(next).length > 0) useUiStore.setState(next)

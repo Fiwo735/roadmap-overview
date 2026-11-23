@@ -15,6 +15,8 @@ export interface UiState {
   hoveredLegId: string | null
   /** The place row currently expanded into its search box. */
   expandedPlaceId: string | null
+  /** The place whose name is being edited inline in the list. */
+  renamingPlaceId: string | null
   /** Id of the open modal dialog (e.g. 'share'), or null. */
   openDialogId: string | null
 
@@ -26,6 +28,8 @@ export interface UiState {
   selectLeg: (id: string | null) => void
   hoverLeg: (id: string | null) => void
   expandPlace: (id: string | null) => void
+  /** Start (or, with null, stop) renaming a place; closes any expanded search row. */
+  renamePlace: (id: string | null) => void
   openDialog: (id: string) => void
   closeDialog: () => void
 }
@@ -38,6 +42,7 @@ export const useUiStore = create<UiState>()((set) => ({
   selectedLegId: null,
   hoveredLegId: null,
   expandedPlaceId: null,
+  renamingPlaceId: null,
   openDialogId: null,
 
   setTheme: (theme) => set({ theme }),
@@ -47,7 +52,9 @@ export const useUiStore = create<UiState>()((set) => ({
   hoverPlace: (hoveredPlaceId) => set({ hoveredPlaceId }),
   selectLeg: (selectedLegId) => set({ selectedLegId }),
   hoverLeg: (hoveredLegId) => set({ hoveredLegId }),
-  expandPlace: (expandedPlaceId) => set({ expandedPlaceId }),
+  // Search and rename are two modes of the same row: opening one ends the other.
+  expandPlace: (expandedPlaceId) => set((s) => ({ expandedPlaceId, renamingPlaceId: expandedPlaceId ? null : s.renamingPlaceId })),
+  renamePlace: (renamingPlaceId) => set((s) => ({ renamingPlaceId, expandedPlaceId: renamingPlaceId ? null : s.expandedPlaceId })),
   openDialog: (openDialogId) => set({ openDialogId }),
   closeDialog: () => set({ openDialogId: null }),
 }))

@@ -49,17 +49,22 @@ src/
   lib/                       framework-free helpers — unit-tested with Vitest:
                              geo (haversine, bounds), polyline (encode/decode + memo), format,
                              id, trip (defaults, day rules, syncLegs), tripFile (parse/serialize),
-                             routeKey, modes
-  services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs), later
-                             osrm.ts and nominatim.ts
+                             routeKey, modes, geoResult (Nominatim result → GeoResult, short name),
+                             requestQueue (politeness queue), lru, nearest (point-to-path distance,
+                             insert index)
+  services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs), nominatim.ts,
+                             later osrm.ts
   store/                     tripStore (undoable intent), uiStore, routeStore, persistence
   components/                shared UI primitives: Button, IconButton (+Tooltip), Menu, Dialog,
-                             Toast (+ the `toast` API in toast.ts), Spinner, portal.ts (portal target and modal stack)
+                             ContextMenu (a Menu opened at a point), Toast (+ the `toast` API in
+                             toast.ts), Spinner, portal.ts (portal target and modal stack)
   features/<name>/           one folder per feature:
     layout/                  TopBar, Sidebar, TripTitle, UndoRedoButtons, shortcuts, Logo
     map/                     MapView, panes, mapInstance (getMap/useLeafletMap), view helpers
     theme/                   ThemeToggle, theme.ts (init/choose)
-    places/ routing/ stats/ io/ ride/ export-image/   slot placeholders until their feature lands
+    places/                  PlacesPanel (sortable list, search), PlacesLayer (markers, context menus)
+    legs/                    LegConnector (between place rows; summary and mode editor built on it)
+    routing/ stats/ io/ ride/ export-image/   slot placeholders until their feature lands
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
@@ -72,7 +77,7 @@ folders. Slots and where they render:
 | Placeholder | Slot |
 | --- | --- |
 | `ride/RideButton`, `export-image/ExportImageButton`, `io/FileMenu` | top bar, right side (before the theme toggle) |
-| `places/PlacesPanel` | sidebar content (empty state until F1) |
+| `places/PlacesPanel` | sidebar content (renders `legs/LegConnector` between its rows) |
 | `stats/StatsOverlay` | map overlay, top-left |
 | `routing/MapTools` | map overlay, top-right |
 | `ride/RideHud` | map overlay, bottom-centre |
@@ -93,8 +98,9 @@ See `src/types/trip.ts`. Key rules:
   place is reached. Days may be typed out of order; consumers use the *effective day*
   `eff[0] = day[0]`, `eff[i] = max(day[i], eff[i-1])`, and the UI flags rows whose day is lower
   than the previous one. Leg `i` is travelled on day `eff[i+1]`. Trip length in days is
-  `eff[last] - eff[0] + 1`. New places default to `previous.day + 1` when appended (`0` for the
-  first place) and to `previous.day` when inserted in the middle.
+  `eff[last] - eff[0] + 1`. New places default to the previous place's *effective* day + 1 when
+  appended (`0` for the first place) and to the previous place's effective day when inserted in the
+  middle (`defaultDayAt`), so with typed days `[0, 1, 0]` an appended place gets day 2.
 - **Durations.** `effectiveDurationS(leg, route)`: the user's `durationMin` override, else the
   route's duration (OSRM for drive legs, `estimateDurationS()` for the other modes).
 - **Modes.** `src/lib/modes.ts` defines colours, dashes and speed estimates per mode. Map,
@@ -104,9 +110,11 @@ See `src/types/trip.ts`. Key rules:
 
 - `store/tripStore.ts`: Zustand store holding `trip: Trip` plus actions; wrapped in zundo
   `temporal` so `undo()`/`redo()` cover intent only. Continuous edits (typing, dragging) must
-  produce one history entry per gesture (commit on blur/Enter/drag end).
+  produce one history entry per gesture (commit on blur/Enter/drag end). Machine-made follow-ups of
+  a gesture (a reverse-geocoded name arriving after a drop) go through `withoutHistory(fn)`.
 - `store/uiStore.ts`: non-undoable UI state — theme, mobile sidebar, selection/hover of places
-  and legs, which place row is expanded into search, the open dialog id. Ids that disappear from
+  and legs, which place row is expanded into search (`expandedPlaceId`) or being renamed
+  (`renamingPlaceId`; the two are mutually exclusive), the open dialog id. Ids that disappear from
   the trip (undo, delete, import) are cleared automatically (`bootstrap.ts`). Features with
   self-contained state (ride playback, …) add their own small store.
 - `store/routeStore.ts`: derived route cache `Record<key, LegRoute>` + per-key status
@@ -126,7 +134,7 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 | --- | --- | --- |
 | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution (map and exported image); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. |
 | `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline`; one request per leg (from, via…, to); a queue with ≤ 1 request in flight and ≥ 1 s between starts; results cached by key; stale requests aborted. |
-| `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally. `format=jsonv2&addressdetails=1`. |
+| `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
 
 Base URLs are constants in `src/services/config.ts` so they can be pointed elsewhere.
 
@@ -136,7 +144,11 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
   handles, place markers, labels, ride vehicle, popups/menus. Our panes are created in
   `features/map/panes.ts` (`PANES.routeCasing | route | via | markers | labels | ride`); pass the
   name as the `pane` option of a layer.
-- Place markers: numbered circular pins with a permanent short label next to them.
+- Place markers: numbered circular badges (marker pane) with a permanent short label (Leaflet
+  tooltip in the labels pane, class `place-label`) beside each. Markers and labels are not themed:
+  the tiles are always light, so they stay a white-ringed badge and a light pill on any tile.
+  Crowded labels give way to each other (`features/places/labelLayout.ts`); adding the class
+  `hide-place-labels` to the map container hides all labels but the hovered/selected one.
 - Route styling comes from `MODES` (`src/lib/modes.ts`). Hovered/selected legs get a
   highlight; legs still routing show a thin grey dashed straight placeholder.
 - Map overlays are React components stacked above the map (not Leaflet popups), styled with the
@@ -239,5 +251,74 @@ Each feature appends a short entry here: what it added, where it lives, anything
 - **Tests**: Vitest covers lib, stores and persistence; Playwright covers the shell, theme, title,
   undo/redo, autosave, mobile layout, the mocks themselves and the shared components.
 - **Known gaps**: two open tabs overwrite each other's autosave (last write wins; no
-  cross-tab sync or warning; planned for F8); no marker or route layers yet (F1/F2); the top bar
+  cross-tab sync or warning; planned for F8); no route layers yet (F2); the top bar
   has no overflow strategy for the later Ride/Image/File buttons on phones (F8).
+
+### F1 — places list, search, day field, labelled markers
+
+- **Nominatim client** (`services/nominatim.ts`): `searchPlaces(query, { signal })` and
+  `reverseGeocode(latLng, { signal })` return `GeoResult` (`lib/geoResult.ts`: `shortName()` is the
+  pure short-form rule, `regionLine()` the secondary line of a result). Everything goes through
+  one `lib/requestQueue.ts` queue (≥ 1 s between request starts, one in flight, identical keys
+  share a run, a run is aborted/dropped only when *all* its callers aborted) plus LRU caches
+  (40 searches, 60 reverse lookups; `null` "nothing there" answers are cached too). Failures
+  reject with `NominatimError` (`kind` network/http/timeout); aborts reject with an AbortError
+  (`isAbortError`). `createNominatimClient({ fetch, … })` exists for tests. Searches pass the visible
+  map area as an unbounded `viewbox` (`viewboxParam()`: rounded outward to whole degrees, which is
+  also part of the cache key) so nearby places rank first; repeated hits for one place (same short
+  name, region line, within 5 km) are dropped (`dedupeResults`). Reverse results are named after
+  their settlement (`settlementName`: city, town, village, hamlet, municipality, else the usual
+  short name), so a pin dropped in central Munich is "Munich", not its quarter; search results keep
+  `name` first so a campsite stays a campsite. The queue is generic
+  (`minIntervalMs`, `maxConcurrent`) so the OSRM client can reuse it.
+- **Places list** (`features/places/`): `PlacesPanel` (dnd-kit sortable, pointer sensor with a 5 px
+  activation distance + keyboard sensor, grip handle only) → `PlaceRow` (grip · badge · name · day
+  · menu; the row is a `li` > `.place-card` + `LegConnector`). One drop = one `movePlace`.
+  While dragging, the leg connectors are hidden, **not collapsed**: dnd-kit measures the other rows
+  at drag start, and a layout change at that moment makes the drag overlay and the drop targets
+  disagree. Collapsing the *space* needs the connector height to be reserved some other way.
+  Outside-click collapse of an expanded row listens to `click`, not `pointerdown`, because the
+  collapse moves the rows below and must not happen between press and release of a click on one.
+- **Day field** (`DayField.tsx`): free typing, commit on Enter/blur as one undo step (`parseDay`
+  accepts plain digits only; anything else reverts), ↑/↓ step the draft, Escape reverts and leaves
+  the field (without closing the mobile slide-over); a draft whose saved day changed underneath
+  (undo, another edit) is dropped in favour of the new value. A row is
+  flagged (`data-warning`, tooltip + screen-reader text) when its day is lower than the previous
+  stop's *effective* day (`effectiveDays()` in `lib/trip.ts`), i.e. exactly the rows whose day
+  would be raised.
+- **Search UX** (`PlaceSearch.tsx`): used by the expanded row and the "Add a place…" box. Search
+  only on Enter / the button; ↑/↓/Enter pick; Escape closes; editing the text discards the results
+  (they belong to the searched text, so Enter searches again instead of picking a stale hit). Picking in a row →
+  `replacePlaceFromResult` (location, name, address, `customName` cleared, one undo step, fly
+  there); picking in the add box → `addPlaceFromResult` (append; the first place of a trip is flown
+  to, later ones refit the trip only when they are off-screen). Rename is `ui.renamingPlaceId`
+  (`ui.renamePlace(id)`, `startRename(id)` in `placeActions.ts`): the map's marker menu and the row
+  menu share it.
+- **Markers** (`PlacesLayer.tsx`): managed imperatively, one `L.marker` per place (draggable,
+  keyboard-focusable, `aria-label`). Only a mouse sets the hovered place (touch taps would leave it
+  stuck: no pointer ever leaves). Hover/selection only toggle CSS classes (`is-hovered`,
+  `is-selected`) — rebuilding an icon under the pointer would swallow clicks and drags. Labels are
+  permanent tooltips in the labels pane; `labelLayout.ts` hides/flips crowded ones (right, then
+  left, then hidden; the hovered/selected label always shows). Drop → one `updatePlace`, then
+  `lookupName(id)` (`nameLookup.ts`) reverse-geocodes machine-named places and applies the answer
+  with `withoutHistory`, only if the place is still where and what it was; "nothing known there"
+  falls back to "Dropped pin", a network error keeps the old name and shows a toast.
+- **Map context menus**: `components/ContextMenu.tsx` (a `Menu` panel opened at a point; focus
+  returns to where it was when it closes). An expanded row ignores clicks in its own portalled
+  actions menu when deciding whether a click was "outside".
+  "Add place here" appends a "Dropped pin" and names it; "Insert place here" (≥ 2 places) uses
+  `insertIndexNear()` (`lib/nearest.ts`) on the cached route geometry of each leg
+  (`legRouteKey` → route store), the straight segment when a leg is not routed yet. Right-click on
+  a marker: Rename / Delete.
+- **Helpers other features may reuse**: `placeActions.ts` (`zoomToPlace`, `addPlaceAt`,
+  `addPlaceFromResult`, `startRename`, `cleanLatLng`), `map/view.ts` `flyToPoint`,
+  `tripStore.withoutHistory`, `lib/nearest.ts` `distanceToPathM`.
+- **Tests**: Vitest for short names, request queue (fake timers), LRU, Nominatim client (stubbed
+  fetch), nearest-leg insert, day parsing/effective days, `withoutHistory`, UI-store modes.
+  `e2e/places.spec.ts` (mocked Nominatim) covers searching/adding, reorder (mouse and keyboard,
+  undo/redo), day edits and the warning, row search/replace, rename, zoom/delete, hover/selection
+  sync, marker drag + undo, late names, label decluttering and the context menus.
+- **Known gaps**: leg connectors are a placeholder line (F2); dragging a marker has no keyboard
+  equivalent (use row search); long-press on touch relies on the browser/Leaflet emitting
+  `contextmenu` (not verified on a real device); labels avoid each other and markers but not route
+  lines; an undo step older than a late reverse-geocoded name keeps the old machine name.
