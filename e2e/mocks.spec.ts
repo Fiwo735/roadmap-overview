@@ -129,3 +129,32 @@ test('requests to any other external host are blocked', async ({ page, mocks }) 
   expect(mocks.blocked).toEqual(['https://example.com/'])
   mocks.blocked.length = 0
 })
+
+test('the tile mock sends CORS headers, so a canvas drawn with its tiles can be read back', async ({ page, mocks }) => {
+  const url = 'https://tile.openstreetmap.org/5/16/11.png'
+  // What the image export does: a crossOrigin image on a canvas that is then read.
+  const readable = await page.evaluate(
+    (u) =>
+      new Promise<boolean>((resolve) => {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = canvas.height = 256
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, 0, 0)
+          try {
+            ctx.getImageData(0, 0, 1, 1)
+            resolve(true)
+          } catch {
+            resolve(false) // SecurityError: the canvas is tainted
+          }
+        }
+        img.onerror = () => resolve(false)
+        img.src = `${u}?probe`
+      }),
+    url,
+  )
+  expect(readable).toBe(true)
+  expect(mocks.tiles.urls).toContain(`${url}?probe`)
+})

@@ -17,6 +17,9 @@
 .dialog--lg {
   --dialog-width: 640px;
 }
+.dialog--xl {
+  --dialog-width: 940px;
+}
 
 .dialog::backdrop {
   background: var(--backdrop);

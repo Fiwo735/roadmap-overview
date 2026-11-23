@@ -10,7 +10,7 @@ interface DialogProps {
   onClose: () => void
   title: string
   description?: string
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
   /** Buttons row, right-aligned under the content. */
   footer?: ReactNode
   children?: ReactNode

@@ -31,7 +31,18 @@ export interface RecordedRequest {
 
 /** Controls and observations for the mocked services; reset for every test. */
 export interface Mocks {
-  tiles: { requests: number }
+  tiles: {
+    requests: number
+    /** Every tile URL asked for, in order. */
+    urls: string[]
+    /** Artificial latency per tile. */
+    delayMs: number
+    /** Requests being served right now, and the most there have been at once since the last reset. */
+    inFlight: number
+    peak: number
+    /** Make the next tiles fail: an HTTP error, or no answer at all. */
+    failWith: 'http-500' | 'network' | null
+  }
   osrm: {
     requests: RecordedRequest[]
     /** Artificial latency per response. */
@@ -66,14 +77,24 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
     },
   )
 
+  // The tile server's CORS header is what lets the image export read the canvas back (`crossOrigin` tiles).
   await context.route('https://tile.openstreetmap.org/**', async (route) => {
     mocks.tiles.requests++
-    await route.fulfill({
-      status: 200,
-      contentType: 'image/png',
-      headers: { ...CORS, 'cache-control': 'max-age=3600' },
-      body: tile,
-    })
+    mocks.tiles.urls.push(route.request().url())
+    mocks.tiles.peak = Math.max(mocks.tiles.peak, ++mocks.tiles.inFlight)
+    try {
+      if (mocks.tiles.delayMs > 0) await new Promise((r) => setTimeout(r, mocks.tiles.delayMs))
+      if (mocks.tiles.failWith === 'network') return await route.abort('failed')
+      if (mocks.tiles.failWith === 'http-500') return await route.fulfill({ status: 500, headers: CORS, body: 'Internal Server Error' })
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        headers: { ...CORS, 'cache-control': 'max-age=3600' },
+        body: tile,
+      })
+    } finally {
+      mocks.tiles.inFlight--
+    }
   })
 
   await context.route('https://router.project-osrm.org/**', async (route) => {
@@ -127,7 +148,7 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
 
 function freshMocks(): Mocks {
   return {
-    tiles: { requests: 0 },
+    tiles: { requests: 0, urls: [], delayMs: 0, inFlight: 0, peak: 0, failWith: null },
     osrm: { requests: [], delayMs: 0, failWith: null },
     nominatim: { requests: [], delayMs: 0, failWith: null },
     blocked: [],

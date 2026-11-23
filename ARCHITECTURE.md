@@ -57,8 +57,10 @@ src/
                              manualRoute (routes that need no router), greatCircle (flight arcs),
                              routeSpans (ferry stretches from OSRM steps), legModes / legBadges (legend and badge placement),
                              shareLink (`#trip=` links), tripFileIo (file names, pretty JSON, text → TripFile)
+                             loadImage (an <img> loaded off-page, for canvases)
   services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs, sample trip), nominatim.ts, osrm.ts,
-                             tripSource.ts (trip files from `?src=` and the sample)
+                             tripSource.ts (trip files from `?src=` and the sample), tiles.ts (the image export's
+                             tile client: global concurrency, de-duplication, memory cache, failures)
   store/                     tripStore (undoable intent), uiStore, routeStore, persistence
   components/                shared UI primitives: Button, IconButton (+Tooltip), Menu, Dialog,
                              ContextMenu (a Menu opened at a point), Toast (+ the `toast` API in
@@ -78,7 +80,8 @@ src/
     io/                      FileMenu (top bar), import/export actions, drop overlay, start-up links (F5)
     ride/                    RideButton, RideHud (day, leg, controls), RideLayer + rideScene (van, trail, camera),
                              rideStore (playback + controls), timeline (the pure ride clock), camera, vehicles
-    export-image/            slot placeholder until its feature lands
+    export-image/            image export (F7): ExportImageButton → ExportDialog, the canvas renderer
+                             (renderTripImage + geometry, card, legend, labelPlacement, paint, …)
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
@@ -151,7 +154,7 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 
 | Service | Use | Rules we follow |
 | --- | --- | --- |
-| `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution (map and exported image); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. |
+| `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution (map and exported image); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. The image export (`services/tiles.ts`) only fetches when the user opens the dialog or presses a button, at most 300 tiles per image (the tile zoom is lowered to stay within it; the preview is drawn small, ≈ 20 tiles), **≤ 6 downloads in flight in total** across all renders (a tile of an abandoned preview still on its way counts), one download per URL however many renders want it, requests still queued when their render is abandoned are dropped, tiles kept in memory (220) so redrawing costs no request, and a failed tile is not asked for again for 30 s by previews (an explicit Download / Copy does retry them). |
 | `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=true&alternatives=false` (the steps only tell where a route takes a ferry, see F3); one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; geometry simplified (12 m) before caching. |
 | A trip file URL the user gives as `?src=…` (and the bundled `samples/…` on this site) | Opening a trip someone published, e.g. a gist | GET only (`services/tripSource.ts`), http(s) only, no credentials or referrer, 20 s timeout, 20 MB cap; the other server has to allow cross-origin reads (CORS). |
 | `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
@@ -607,8 +610,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   start date (range, one undo step per edit, Escape, Apply, clear), folding with persistence, phone
   layout, and that Fit to trip, fitting a leg and the restored first view keep markers clear of the card.
 - **Known gaps**: borders at 50 m resolution (see above); Natural Earth's disputed-area choices apply
-  (Northern Cyprus is shown as Cyprus); the card does not appear in the exported image until F7 draws
-  it; no per-day breakdown; the date field is the browser's native one (looks different per browser);
+  (Northern Cyprus is shown as Cyprus); no per-day breakdown; the date field is the browser's native one (looks different per browser);
   a place picked by search is flown to (`flyToPoint`) without regard for the card, and the fit is not
   redone when the card is folded or unfolded afterwards.
 
@@ -822,3 +824,83 @@ Each feature appends a short entry here: what it added, where it lives, anything
   ferry times) do not shape the timing; a rest day is always the van parked (also after a flight or a
   train); opening a file while a ride runs rebuilds or ends it by the rule above (the file feature can call
   `closeRide()` first for a cleaner hand-over); the per-frame trail clip is O(points of the current leg).
+
+### F7 — image export: a PNG of the map with the travel
+
+- **Dialog** (`features/export-image/`): the top bar's `ExportImageButton` (icon button, `data-testid="export-image-button"`)
+  opens the dialog through `ui.openDialogId === 'export-image'` and mounts `ExportDialog` only while it is open, so the
+  statistics and previews cost nothing the rest of the time (focus goes back to the button when it closes). `Dialog` gained
+  a `size="xl"` (940 px). Preview on the left, controls on the right (stacked below 768 px): size preset (Landscape
+  1920 × 1080, Portrait 1080 × 1350, Square 1080 × 1080, Print A4 landscape 3508 × 2480), resolution (1× / 2× sharper),
+  switches (title and statistics card, place names, day numbers, legend — the legend one is disabled, with a hint, unless
+  two or more modes are in use) and card style (Match app / Light / Dark). The choices live in `exportStore.ts`
+  (`localStorage["roadmap-overview:export-options"]`, repaired field by field by `sanitizeOptions`). "Download PNG" saves
+  `<slug>.png` (`exportFilename`: the trip title, accents dropped); "Copy image" is
+  `navigator.clipboard.write([new ClipboardItem({ 'image/png': promise })])` with the render passed as a promise (Safari
+  needs the write started inside the click) and is hidden when `ClipboardItem` does not exist. While a download or copy
+  renders the dialog shows a progress bar (tiles n of m, drawing, encoding) and disables both buttons; afterwards a result
+  line (success / warning / error). Notes under the preview: an image above 4096 × 4096 pixels ("Very large image — may
+  fail on iPhone/iPad; try 1× or a smaller size": only A4 at 2×; the same wording is the message when the canvas or the
+  PNG cannot be made), legs still routing or failed, country boundaries that could not be loaded, missing tiles, place
+  names that did not fit. Closing the dialog aborts a render in progress. Exporting
+  never touches the trip, the undo history or the autosave.
+- **Preview** (`usePreview.ts`): redrawn 250 ms after the last change (the first drawing at once), an overtaken drawing is
+  aborted, and it is drawn at ≤ 960 px on its long side (`previewScaleFor`) — a tile zoom or two coarser than the real
+  thing, ≈ 20 tiles — so a redraw with other switches asks the tile server for nothing new (tiles are kept in memory).
+  The full-size render usually finds its tiles already there when the preset and resolution did not change.
+- **Renderer** (`renderTripImage.ts`; everything but the painting is pure and unit-tested): `renderTripImage({ trip, legs,
+  stats, countriesStatus, width, height, scale, card, labels, days, legend, theme, signal, onProgress })` →
+  `{ canvas, width, height, tiles: { total, failed, zoom }, hiddenLabels }`; `canvasToPng(canvas)`. The picture is laid out
+  in the preset's *logical* pixels and painted at `scale` canvas pixels per logical pixel, so 2× is the same image with
+  twice the pixels (and tiles one zoom deeper, `pickTileZoom`); cards, markers, lines and text are drawn `uiScaleFor` =
+  `min(width, height) / 900` times bigger than on screen, so a print looks like the screen. Inputs are the same objects the
+  map card uses: `getLegRoutes()` / `useLegRoutes()`, `computeTripStats`, `detectCountries` (via `useTripStats`), `flagUrl`
+  (flags are loaded as images, the country code is drawn when one fails), `formatDateRange`, `MODES`, `haloDash`,
+  `legStyle` (line styles, incl. loading = grey dashed and failed = red dashed), `splitSpans` (ferry crossings inside a
+  drive route), `legBadgeSpots`, `modesInUse`, `modeIconSvg`.
+  - `geometry.ts`: Web-Mercator at fractional zoom, `fitViewport` (zoom and centre that show all points inside the
+    padding; an obstacle — the card, the legend — that a line or marker lies under makes the content move to one side of it,
+    and of all the combinations the one that keeps the most zoom wins, like the map's own fit; content that is already
+    clear is only centred), `pickTileZoom` (the tile zoom whose tiles are 0.62–1.23× their size on the canvas), `tileGrid`
+    / `tilesOf` (columns wrap across the antimeridian, rows stop at the poles), `chooseTileGrid` (lowers the zoom until the
+    grid has ≤ `MAX_TILES` = 300 tiles).
+  - `card.ts`: `buildCardContent` (which tiles the card has — mirrors `TripCard`: distance from two stops, driving only for
+    trips that drive, one tile per other mode, countries "…"/"—") and `layoutCard` (the map card's CSS metrics: width 340,
+    title ≤ 3 lines, subtitle ≤ 2, date range, tiles flowing in rows that grow to fill them, flags wrapping), as a list of
+    drawing ops; `cardTheme.ts` copies the light and dark tokens (`cardTheme.test.ts` fails when `tokens.css` drifts);
+    `legend.ts`, `markers.ts` (marker and label metrics), `attribution.ts` do the same for the other pieces;
+    `labelPlacement.ts` places name labels greedily (first and last stop first; right, left, above, below, the corners; never
+    over a marker, another label, the card, the legend or the attribution, always inside the image); `legDrawing.ts` plans
+    the lines; `icons.ts` turns the page's own SVG icons into `Path2D` outlines so the canvas draws the same icons;
+    `unwrap.ts` moves the legs and places of a trip that crosses the date line onto one continuous map (flight arcs
+    keep counting east past 180°, the live map draws such a trip in two pieces); `flagImages.ts` loads a flag with its
+    viewBox size written on it (Firefox and Safari cannot draw an SVG without a size on a canvas); `paint.ts` has the
+    canvas painters; `fonts.ts` waits for Inter (a canvas does not); `deliver.ts` has the download and clipboard code.
+  - Always drawn: "© OpenStreetMap contributors" in the bottom-right corner (`TILE_ATTRIBUTION_TEXT`). A tile that cannot be
+    loaded leaves the land colour of the OSM style behind it; the image is still made, and the dialog warns.
+- **Tiles** (`services/tiles.ts`, `createTileClient`): one global queue — ≤ 6 downloads in flight in total (`lib/loadImage.ts`,
+  `crossOrigin = anonymous`, 20 s timeout), however many renders ask; in-flight de-duplication (`Map<url, download>`: renders
+  that want the same tile share the download); a render that is abandoned releases its queued requests (a queued download
+  nobody waits for is never started), while those already on their way finish and are kept; an LRU of 220 decoded tiles
+  kept across renders; failures remembered for 30 s, except that `retryFailed` (passed by Download / Copy as
+  `retryFailedTiles`) asks again, so a passing 429/5xx does not bake a hole into the picture; progress per tile. See the
+  policy row in "External services". The real-network check of a 1920 × 1080 export asked for 84 tiles, a 2160 × 2160 one
+  (2×) for 196.
+- **Shared-file edits** (all additive): `Dialog` `xl` size; `e2e/fixtures.ts` `mocks.tiles` gained `urls`, `delayMs`,
+  `failWith` (`'http-500' | 'network'`), `inFlight` / `peak` (the tile mock has always served CORS headers, which is what
+  keeps the canvas readable); `lib/loadImage.ts`, `services/tiles.ts` are new; no change to `types/trip.ts`.
+- **Tests**: Vitest for projection and `fitViewport` (padding, single point, max zoom, obstacles incl. lines between
+  points and several obstacles), tile zoom and grids (wrapping, poles, the cap), label placement, text wrapping and
+  ellipsis, card content and layout, theme tokens, leg drawing plans, legend / label / attribution metrics, icon outlines,
+  options, file names, the tile client (concurrency, de-duplication, cache, failures, abort). `e2e/export-image.spec.ts`
+  (mocked tiles, with CORS): dialog open/close and focus, preview content, PNG size for every preset and 2×, pixel checks
+  of the downloaded file (tiles, route, card corner, attribution), every switch changes the preview, legend needs two
+  modes, card style vs app theme, ≤ 300 tiles and ≤ 6 at a time for A4 at 2×, progress and disabled buttons, tile
+  failures (warning, image still made), clipboard, empty and one-place trips, remembered options (and damaged ones),
+  unrouted legs, no new tiles after closing, no undo step.
+- **Known gaps**: the preview is not the final picture pixel for pixel (it uses coarser tiles and a smaller scale); lines
+  are not avoided by labels (as on the map); a trip that goes right around the world is fitted into a map wider than
+  the tile pyramid's one copy and repeats tiles;
+  2× A4 is a 35-megapixel canvas, which iOS Safari refuses (the dialog warns up front and says so on failure); the legend does not list the
+  dotted "straight line" drive style (as on the map); text is set in Inter only, so scripts it lacks fall back to the system
+  font; the card cannot be moved to another corner.
