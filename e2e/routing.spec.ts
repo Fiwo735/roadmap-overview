@@ -73,7 +73,7 @@ test.describe('road routes and leg summaries', () => {
     expect(b.at - a.at).toBeGreaterThanOrEqual(900)
     const url = new URL(a.url)
     expect(url.pathname).toBe('/route/v1/driving/4.83200,45.75780;6.12890,45.89920')
-    expect(Object.fromEntries(url.searchParams)).toEqual({ overview: 'full', geometries: 'polyline', steps: 'false', alternatives: 'false' })
+    expect(Object.fromEntries(url.searchParams)).toEqual({ overview: 'full', geometries: 'polyline', steps: 'true', alternatives: 'false' })
     expect(await app.history()).toEqual({ past: 3, future: 0 })
 
     // The lines are on the map: casing + line + hit area per leg.

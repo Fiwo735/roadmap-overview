@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import {
+  divIcon,
   marker as leafletMarker,
   polyline as leafletPolyline,
   type LeafletMouseEvent,
@@ -8,10 +9,13 @@ import {
   type Polyline,
 } from 'leaflet'
 import { useMap } from 'react-leaflet'
+import { legBadgeSpots, type BadgeSpot } from '../../lib/legBadges'
 import { MODES } from '../../lib/modes'
+import { splitSpans } from '../../lib/routeSpans'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
-import type { LatLng } from '../../types/trip'
+import type { LatLng, LegMode, RouteSpan } from '../../types/trip'
+import { modeIconSvg } from '../legs/modeIcons'
 import { displayName } from '../places/names'
 import { cleanLatLng } from '../places/placeActions'
 import { PANES } from '../map/panes'
@@ -32,15 +36,26 @@ interface ViaHandle {
   dragging: boolean
 }
 
+/** A mode badge on the map (a leg of its own mode, or a ferry crossing inside a drive leg). */
+interface BadgeHandle {
+  marker: Marker
+  mode: LegMode
+}
+
 interface LegGraphics {
+  /** The leg's line: in the leg's own mode, or — for a drive route with ferry crossings — its driven stretches. */
   casing: Polyline
   line: Polyline
+  /** The ferry crossings inside a drive route (empty polylines otherwise), drawn in the ferry style. */
+  ferryCasing: Polyline
+  ferryLine: Polyline
   hit: Polyline
   vias: ViaHandle[]
+  badges: BadgeHandle[]
   /** What is currently drawn (see `drawnFor`): changes exactly when the polylines need new points. */
   signature: string
   /** The leg's last successfully routed geometry: kept on screen, faded, while a changed leg re-routes. */
-  lastRouted?: { key: string; coords: readonly LatLng[] }
+  lastRouted?: { key: string; coords: readonly LatLng[]; spans?: RouteSpan[] }
   /** The line shows `lastRouted` rather than the leg's current status. */
   stale: boolean
 }
@@ -56,9 +71,10 @@ const sameSpot = (marker: Marker, p: LatLng) => {
 
 /**
  * Map layer: every leg as a casing + line in its mode's style (a thin grey dashed placeholder while
- * routing, red dashed when it failed), draggable via-point handles, and the Google-Maps-style
- * reshaping (see reshape.ts). Managed imperatively like the place markers: hover and selection only
- * restyle existing polylines, never rebuild them under the pointer.
+ * routing, red dashed when it failed; ferry crossings inside a drive route in the ferry style), mode
+ * badges, draggable via-point handles, and the Google-Maps-style reshaping (see reshape.ts). Managed
+ * imperatively like the place markers: hover and selection only restyle existing polylines, never
+ * rebuild them under the pointer.
  */
 export function RouteLayer() {
   const map = useMap()
@@ -89,8 +105,7 @@ export function RouteLayer() {
         const selected = legId === selectedLegId
         applyStyle(g, info, hovered, selected)
         if (bringToFront && (hovered || selected)) {
-          g.casing.bringToFront()
-          g.line.bringToFront()
+          for (const layer of [g.casing, g.ferryCasing, g.line, g.ferryLine]) layer.bringToFront()
         }
       }
     }
@@ -133,12 +148,18 @@ export function RouteLayer() {
         g = createGraphics(info, shaper, map)
         live.set(legId, g)
       }
-      const { signature, coords } = drawnFor(g, info)
+      const { signature, coords, spans } = drawnFor(g, info)
       if (g.signature !== signature) {
-        const latlngs = coords.map((p): [number, number] => [p.lat, p.lng])
-        g.casing.setLatLngs(latlngs)
-        g.line.setLatLngs(latlngs)
-        g.hit.setLatLngs(latlngs)
+        const parts = splitSpans(coords, spans)
+        const toLatLngs = (points: readonly LatLng[]) => points.map((p): [number, number] => [p.lat, p.lng])
+        const mainLatLngs = parts.main.map(toLatLngs)
+        g.casing.setLatLngs(mainLatLngs)
+        g.line.setLatLngs(mainLatLngs)
+        const ferryLatLngs = parts.ferry.map(toLatLngs)
+        g.ferryCasing.setLatLngs(ferryLatLngs)
+        g.ferryLine.setLatLngs(ferryLatLngs)
+        g.hit.setLatLngs(toLatLngs(coords))
+        syncBadges(g, legBadgeSpots(info.leg.mode, coords, spans), info.leg.id, map)
         g.signature = signature
       }
       applyStyle(g, info, legId === hoveredLegId, legId === selectedLegId)
@@ -155,38 +176,54 @@ export function RouteLayer() {
  * keeps showing its last routed geometry until the new route arrives; the straight placeholder is
  * only for legs that were never routed, and a failure replaces the old line at once.
  */
-function drawnFor(g: LegGraphics, info: LegRouteInfo): { signature: string; coords: readonly LatLng[] } {
-  if (info.status === 'ok') g.lastRouted = { key: info.key, coords: info.coords }
+function drawnFor(
+  g: LegGraphics,
+  info: LegRouteInfo,
+): { signature: string; coords: readonly LatLng[]; spans?: RouteSpan[] } {
+  if (info.status === 'ok') g.lastRouted = { key: info.key, coords: info.coords, spans: info.route?.spans }
   else if (info.status === 'error') g.lastRouted = undefined
   g.stale = info.status === 'loading' && g.lastRouted !== undefined
-  if (g.stale && g.lastRouted) return { signature: `stale|${g.lastRouted.key}`, coords: g.lastRouted.coords }
-  return { signature: `${info.status}|${info.key}`, coords: info.coords }
+  if (g.stale && g.lastRouted) {
+    const { key, coords, spans } = g.lastRouted
+    return { signature: `stale|${key}|${spanSignature(spans)}`, coords, spans }
+  }
+  const spans = info.status === 'ok' ? info.route?.spans : undefined
+  return { signature: `${info.status}|${info.key}|${spanSignature(spans)}`, coords: info.coords, spans }
 }
 
+const spanSignature = (spans: readonly RouteSpan[] | undefined) =>
+  spans?.map((s) => `${s.mode[0]}${s.from}-${s.to}`).join(',') ?? ''
+
 function applyStyle(g: LegGraphics, info: LegRouteInfo, hovered: boolean, selected: boolean): void {
-  const style = legStyle({
-    mode: info.leg.mode,
-    straight: info.leg.straight === true,
-    status: info.status,
-    stale: g.stale,
-    hovered,
-    selected,
-  })
+  const input = { straight: info.leg.straight === true, status: info.status, stale: g.stale, hovered, selected }
+  const style = legStyle({ ...input, mode: info.leg.mode })
   g.line.setStyle(style.line)
   g.casing.setStyle(style.casing ?? { opacity: 0 })
+  // Ferry crossings inside a drive route look like any ferry; there are none on other legs.
+  const ferry = legStyle({ ...input, mode: 'ferry', straight: false })
+  g.ferryLine.setStyle(ferry.line)
+  g.ferryCasing.setStyle(ferry.casing ?? { opacity: 0 })
+  for (const badge of g.badges) {
+    const el = badge.marker.getElement()
+    if (!el) continue
+    el.classList.toggle('is-active', hovered || selected)
+    el.classList.toggle('is-stale', g.stale)
+  }
 }
 
 function removeGraphics(g: LegGraphics): void {
-  g.casing.remove()
-  g.line.remove()
-  g.hit.remove()
+  for (const layer of [g.casing, g.ferryCasing, g.line, g.ferryLine, g.hit]) layer.remove()
   for (const v of g.vias) v.marker.remove()
+  for (const b of g.badges) b.marker.remove()
 }
 
 function createGraphics(info: LegRouteInfo, shaper: Reshaper, map: LeafletMap): LegGraphics {
   const legId = info.leg.id
-  const casing = leafletPolyline([], { pane: PANES.routeCasing, interactive: false, lineJoin: 'round' }).addTo(map)
-  const line = leafletPolyline([], { pane: PANES.route, interactive: false, lineJoin: 'round' }).addTo(map)
+  const piece = (pane: string) => leafletPolyline([], { pane, interactive: false, lineJoin: 'round' }).addTo(map)
+  const casing = piece(PANES.routeCasing)
+  const ferryCasing = piece(PANES.routeCasing)
+  const line = piece(PANES.route)
+  const ferryLine = piece(PANES.route)
   const hit = leafletPolyline([], {
     pane: PANES.route,
     className: HIT_CLASS,
@@ -200,7 +237,13 @@ function createGraphics(info: LegRouteInfo, shaper: Reshaper, map: LeafletMap): 
   }).addTo(map)
 
   // Tests and styles find a leg's elements by these.
-  for (const [role, layer] of [['casing', casing], ['line', line], ['hit', hit]] as const) {
+  for (const [role, layer] of [
+    ['casing', casing],
+    ['line', line],
+    ['ferry-casing', ferryCasing],
+    ['ferry-line', ferryLine],
+    ['hit', hit],
+  ] as const) {
     layer.getElement()?.setAttribute('data-leg-id', legId)
     layer.getElement()?.setAttribute('data-role', `route-${role}`)
   }
@@ -219,7 +262,59 @@ function createGraphics(info: LegRouteInfo, shaper: Reshaper, map: LeafletMap): 
   // The map's own right-click menu ("Add place here" / "Insert place here") works on lines too.
   hit.on('contextmenu', (e: LeafletMouseEvent) => map.fire('contextmenu', e))
 
-  return { casing, line, hit, vias: [], signature: '', stale: false }
+  return { casing, line, ferryCasing, ferryLine, hit, vias: [], badges: [], signature: '', stale: false }
+}
+
+const BADGE_SIZE = 26
+
+function badgeIcon(mode: LegMode) {
+  const { color } = MODES[mode]
+  return divIcon({
+    className: 'leg-badge',
+    html: `<span class="leg-badge__disc" style="--badge-color:${color}">${modeIconSvg(mode, 14)}</span>`,
+    iconSize: [BADGE_SIZE, BADGE_SIZE],
+    iconAnchor: [BADGE_SIZE / 2, BADGE_SIZE / 2],
+  })
+}
+
+/**
+ * Bring the leg's mode badges (a ship, train or plane in the middle of the line; a ship on each ferry
+ * crossing of a drive route) in line with `spots`. Badges are reused so one under the pointer is not
+ * rebuilt; clicking one selects the leg like clicking its line does.
+ */
+function syncBadges(g: LegGraphics, spots: readonly BadgeSpot[], legId: string, map: LeafletMap): void {
+  spots.forEach((spot, i) => {
+    let badge: BadgeHandle | undefined = g.badges[i]
+    if (badge && badge.mode !== spot.mode) {
+      badge.marker.remove()
+      badge = undefined
+    }
+    if (!badge) {
+      const marker = leafletMarker([spot.at.lat, spot.at.lng], {
+        icon: badgeIcon(spot.mode),
+        pane: PANES.routeBadges,
+        keyboard: false,
+        title: `${MODES[spot.mode].label} · click to select this leg`,
+      })
+      const ui = () => useUiStore.getState()
+      marker.on('click', () => ui().selectLeg(legId))
+      marker.on('mouseover', () => {
+        if (isMouse()) ui().hoverLeg(legId)
+      })
+      marker.on('mouseout', () => {
+        if (ui().hoveredLegId === legId) ui().hoverLeg(null)
+      })
+      marker.addTo(map)
+      const el = marker.getElement()
+      el?.setAttribute('data-leg-id', legId)
+      el?.setAttribute('data-mode', spot.mode)
+      el?.setAttribute('data-role', 'leg-badge')
+      badge = { marker, mode: spot.mode }
+      g.badges[i] = badge
+    }
+    badge.marker.setLatLng([spot.at.lat, spot.at.lng])
+  })
+  for (const extra of g.badges.splice(spots.length)) extra.marker.remove()
 }
 
 /** One draggable handle per via point of the leg, created/removed/moved to match the trip. */

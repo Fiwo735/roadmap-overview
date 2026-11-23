@@ -52,3 +52,37 @@ export function boundsOf(points: readonly LatLng[]): Bounds | null {
   }
   return { south, west, north, east }
 }
+
+/** Web-Mercator "y" of a latitude (the map is drawn in it, so straight lines on screen are straight in it). */
+const mercatorY = (latDeg: number) => Math.log(Math.tan(Math.PI / 4 + (latDeg * Math.PI) / 360))
+const latFromMercatorY = (y: number) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI
+
+/** Leaflet's maps stop at this latitude; beyond it the projection is not defined. */
+const MAX_MERCATOR_LAT = 85
+
+/**
+ * The point `fraction` (0 … 1) of the way along the polyline through `points`, measured by length
+ * (0.5 is the middle of the line, wherever its vertices happen to be). Inside a segment the point is
+ * interpolated the way the map draws it — as a straight line on screen — so a badge placed there sits
+ * on the drawn line even for a long straight segment. Null for an empty path.
+ */
+export function pointAlongPath(points: readonly LatLng[], fraction: number): LatLng | null {
+  if (points.length === 0) return null
+  const total = pathLengthM(points)
+  if (points.length === 1 || total === 0) return { lat: points[0].lat, lng: points[0].lng }
+  let remaining = Math.min(1, Math.max(0, fraction)) * total
+  for (let i = 1; i < points.length; i++) {
+    const length = haversineM(points[i - 1], points[i])
+    if (remaining <= length && length > 0) {
+      const t = remaining / length
+      const [a, b] = [points[i - 1], points[i]]
+      const lng = a.lng + (b.lng - a.lng) * t
+      if (Math.abs(a.lat) > MAX_MERCATOR_LAT || Math.abs(b.lat) > MAX_MERCATOR_LAT) return { lat: a.lat + (b.lat - a.lat) * t, lng }
+      const [ya, yb] = [mercatorY(a.lat), mercatorY(b.lat)]
+      return { lat: latFromMercatorY(ya + (yb - ya) * t), lng }
+    }
+    remaining -= length
+  }
+  const last = points[points.length - 1]
+  return { lat: last.lat, lng: last.lng }
+}

@@ -8,7 +8,8 @@ export function shortcutLabel(key: string, shift = false): string {
   return isMac ? `${shift ? '⇧' : ''}⌘${key}` : `Ctrl+${shift ? 'Shift+' : ''}${key}`
 }
 
-function isTextEntry(target: EventTarget | null): boolean {
+/** Is the event target a field the user types in (where keys such as Escape and Ctrl+Z belong to the field)? */
+export function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }

@@ -72,6 +72,19 @@ export interface Trip {
   legs: Leg[]
 }
 
+/**
+ * A stretch of a routed leg travelled in one way. OSRM's car profile drives onto car ferries, so a
+ * 'drive' leg can contain ferry crossings; `from` / `to` are indices into the decoded geometry
+ * (inclusive).
+ */
+export interface RouteSpan {
+  mode: 'drive' | 'ferry'
+  from: number
+  to: number
+  distanceM: number
+  durationS: number
+}
+
 /** Geometry + metrics for one leg. DERIVED: cached by `key`, never part of undo history. */
 export interface LegRoute {
   /** The routing key this result was computed for (legRouteKey). */
@@ -82,6 +95,14 @@ export interface LegRoute {
   /** Duration from the router (drive) or the mode estimate (others), before any user override. */
   durationS: number
   source: 'osrm' | 'manual'
+  /**
+   * Optional (added without a version bump): how the geometry splits into driven and ferry stretches,
+   * from the router's steps. When present the spans cover the whole geometry in order — the first
+   * starts at index 0, the last ends at the final point, and each starts at the point where the
+   * previous one ends. Omitted when the whole leg is travelled as `Leg.mode` says (always for
+   * manual routes, and for a drive route without ferries).
+   */
+  spans?: RouteSpan[]
 }
 
 /** The on-disk / share format. A file opens instantly because routes travel with it. */

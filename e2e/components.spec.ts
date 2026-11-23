@@ -234,3 +234,58 @@ test.describe('IconButton', () => {
     await expect(page.locator('.tooltip')).toBeHidden()
   })
 })
+
+test.describe('SegmentedControl', () => {
+  test('is a radio group with one tab stop: click, Enter and Space choose, the arrow keys and Home/End only move the focus', async ({ page }) => {
+    const group = page.getByRole('radiogroup', { name: 'Travel mode' })
+    const radio = (name: string) => group.getByRole('radio', { name })
+    const value = page.getByTestId('segment-value')
+    await expect(radio('Drive')).toBeChecked()
+    await expect(radio('Ferry')).toHaveAttribute('tabindex', '-1')
+
+    await radio('Train').click()
+    await expect(value).toHaveText('train')
+    await expect(radio('Train')).toBeChecked()
+
+    // Moving the focus chooses nothing, and the tab stop goes with the focus.
+    await page.keyboard.press('ArrowRight')
+    await expect(radio('Drive')).toBeFocused()
+    await expect(radio('Drive')).toHaveAttribute('tabindex', '0')
+    await expect(radio('Train')).toHaveAttribute('tabindex', '-1')
+    await expect(value).toHaveText('train')
+    await page.keyboard.press('ArrowLeft')
+    await expect(radio('Train')).toBeFocused()
+    await page.keyboard.press('Home')
+    await expect(radio('Drive')).toBeFocused()
+    await page.keyboard.press('End')
+    await expect(radio('Train')).toBeFocused()
+    await expect(radio('Train')).toBeChecked()
+    await expect(value).toHaveText('train')
+
+    // Enter and Space choose the focused one.
+    await page.keyboard.press('ArrowLeft')
+    await expect(radio('Ferry')).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(value).toHaveText('ferry')
+    await expect(radio('Ferry')).toBeChecked()
+    await page.keyboard.press('Home')
+    await page.keyboard.press('Space')
+    await expect(value).toHaveText('drive')
+    await expect(radio('Drive')).toBeChecked()
+  })
+})
+
+test.describe('Switch', () => {
+  test('toggles with click, Space and Enter and reports its state', async ({ page }) => {
+    const toggle = page.getByRole('switch', { name: 'Follow roads' })
+    await expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-checked', 'false')
+    await toggle.focus()
+    await page.keyboard.press('Space')
+    await expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await page.keyboard.press('Enter')
+    await expect(toggle).toHaveAttribute('aria-checked', 'false')
+    await expect(page.getByRole('switch', { name: 'Unavailable' })).toBeDisabled()
+  })
+})

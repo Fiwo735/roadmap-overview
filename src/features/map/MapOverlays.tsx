@@ -1,3 +1,4 @@
+import { LegLegend } from '../legs/LegLegend'
 import { StatsOverlay } from '../stats/StatsOverlay'
 import { MapTools } from '../routing/MapTools'
 import { RideHud } from '../ride/RideHud'
@@ -14,6 +15,9 @@ export function MapOverlays() {
       </div>
       <div className="map-slot map-slot--top-right">
         <MapTools />
+      </div>
+      <div className="map-slot map-slot--bottom-left">
+        <LegLegend />
       </div>
       <div className="map-slot map-slot--bottom-center">
         <RideHud />

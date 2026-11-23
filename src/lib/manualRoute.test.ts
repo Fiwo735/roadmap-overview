@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { pathLengthM } from './geo'
-import { computeManualRoute, straightPath } from './manualRoute'
+import { haversineM, pathLengthM } from './geo'
+import { ARC_SEGMENTS } from './greatCircle'
+import { computeManualRoute, manualPath, straightPath } from './manualRoute'
 import { estimateDurationS } from './modes'
 import { decodePolyline } from './polyline'
 import { legRouteKey } from './routeKey'
@@ -31,6 +32,33 @@ describe('computeManualRoute', () => {
     expect(computeManualRoute(a, [], b, 'flight').key).toBe(legRouteKey(a, b, { mode: 'flight', via: [] }))
   })
 
+  it.each(['ferry', 'train'] as const)('draws a %s straight through its via points', (mode) => {
+    const route = computeManualRoute(a, [v], b, mode)
+    const points = decodePolyline(route.geometry)
+    expect(points).toHaveLength(3)
+    expect(route.distanceM).toBeCloseTo(pathLengthM([a, v, b]), 3)
+    expect(route.durationS).toBe(estimateDurationS(mode, route.distanceM))
+  })
+
+  it('draws a flight as a great-circle arc through its via points, with the distance measured along it', () => {
+    const direct = computeManualRoute(a, [], b, 'flight')
+    expect(decodePolyline(direct.geometry)).toHaveLength(ARC_SEGMENTS + 1)
+    expect(direct.distanceM).toBeCloseTo(haversineM(a, b), -2)
+    expect(direct.durationS).toBe(estimateDurationS('flight', direct.distanceM))
+
+    const through = decodePolyline(computeManualRoute(a, [v], b, 'flight').geometry)
+    expect(through).toHaveLength(2 * ARC_SEGMENTS + 1)
+    expect(through[ARC_SEGMENTS].lat).toBeCloseTo(v.lat, 5)
+    expect(through[ARC_SEGMENTS].lng).toBeCloseTo(v.lng, 5)
+  })
+
+  it('a longer way round takes longer: via points count towards distance and duration', () => {
+    const direct = computeManualRoute(a, [], b, 'train')
+    const detour = computeManualRoute(a, [{ lat: 48, lng: 2 }], b, 'train')
+    expect(detour.distanceM).toBeGreaterThan(direct.distanceM)
+    expect(detour.durationS).toBeGreaterThan(direct.durationS)
+  })
+
   it('works without via points and for a degenerate leg', () => {
     expect(decodePolyline(computeManualRoute(a, [], b, 'train').geometry)).toHaveLength(2)
     const same = computeManualRoute(a, [], a, 'drive')
@@ -41,5 +69,12 @@ describe('computeManualRoute', () => {
 describe('straightPath', () => {
   it('lists from, via points and to in order', () => {
     expect(straightPath(a, [v], b)).toEqual([a, v, b])
+  })
+})
+
+describe('manualPath', () => {
+  it('is straight for everything but flights', () => {
+    for (const mode of ['drive', 'ferry', 'train'] as const) expect(manualPath(a, [v], b, mode)).toEqual([a, v, b])
+    expect(manualPath(a, [v], b, 'flight').length).toBeGreaterThan(3)
   })
 })

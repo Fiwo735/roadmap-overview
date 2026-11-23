@@ -39,6 +39,26 @@ test('OSRM mock returns a realistic route through the requested coordinates', as
   expect(mocks.osrm.requests).toHaveLength(1)
 })
 
+test('OSRM mock returns steps on request, with a ferry step between Dover and Calais', async ({ page }) => {
+  const get = (url: string) => page.evaluate((u) => fetch(u).then((r) => r.json()), url)
+  const plain = await get(osrmUrl('Lyon', 'Annecy'))
+  expect(plain.routes[0].legs[0].steps).toEqual([])
+
+  const withSteps = await get(`${osrmUrl('Lyon', 'Annecy')}&steps=true`)
+  expect(withSteps.routes[0].legs[0].steps.map((s: { mode: string }) => s.mode)).toEqual(['driving'])
+
+  const ferry = await get(`${osrmUrl('Dover', 'Calais')}&steps=true`)
+  const steps = ferry.routes[0].legs[0].steps as Array<{ mode: string; duration: number; geometry: string }>
+  expect(steps.map((s) => s.mode)).toEqual(['driving', 'ferry', 'driving'])
+  expect(steps[1].duration).toBe(2_090)
+  // The overview is exactly what the steps trace together.
+  const traced = steps.flatMap((s, i) => decodePolyline(s.geometry).slice(i === 0 ? 0 : 1))
+  expect(decodePolyline(ferry.routes[0].geometry)).toHaveLength(traced.length)
+  // And it works in the other direction too.
+  const back = await get(`${osrmUrl('Calais', 'Dover')}&steps=true`)
+  expect(back.routes[0].legs[0].steps.map((s: { mode: string }) => s.mode)).toEqual(['driving', 'ferry', 'driving'])
+})
+
 test('OSRM mock can be told to fail', async ({ page, mocks }) => {
   mocks.osrm.failWith = 'NoRoute'
   const data = await page.evaluate((url) => fetch(url).then((r) => r.json()), osrmUrl('Berlin', 'Prague'))

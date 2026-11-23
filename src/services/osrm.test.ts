@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { decodePolylineUncached, encodePolyline } from '../lib/polyline'
 import { isAbortError } from '../lib/requestQueue'
 import type { LatLng } from '../types/trip'
+import doverCalais from '../lib/fixtures/osrm-dover-calais.json'
 import { createOsrmClient, OsrmError } from './osrm'
 
 const lyon = { lat: 45.7578, lng: 4.832 }
@@ -46,7 +47,7 @@ describe('routeDrive', () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({
       overview: 'full',
       geometries: 'polyline',
-      steps: 'false',
+      steps: 'true',
       alternatives: 'false',
     })
   })
@@ -63,6 +64,75 @@ describe('routeDrive', () => {
     expect(points[0].lat).toBeCloseTo(lyon.lat, 4)
     expect(points.at(-1)!.lng).toBeCloseTo(annecy.lng, 4)
     expect(route.geometry.length).toBeLessThan(encodePolyline(dense).length / 4)
+  })
+
+  describe('ferry crossings (steps)', () => {
+    const hirtshals = { lat: 57.5887, lng: 9.9597 }
+    const kristiansand = { lat: 58.1466, lng: 7.9956 }
+    const port = { lat: 57.5972, lng: 9.9741 }
+    const arrival = { lat: 58.1362, lng: 7.9922 }
+    // Like `road`, but pinned: real steps start exactly where the previous one ended.
+    const pinned = (a: LatLng, b: LatLng, n: number) =>
+      road(a, b, n).map((p, i) => ({ lat: p.lat - Math.sin((i / n) * 9) * 0.01 + Math.sin((i / n) * Math.PI) * 0.01, lng: p.lng }))
+    const step = (mode: string, points: LatLng[], distance: number, duration: number) => ({
+      mode,
+      distance,
+      duration,
+      geometry: encodePolyline(points),
+    })
+    const steps = [
+      step('driving', pinned(hirtshals, port, 120), 1500, 120),
+      step('ferry', [port, { lat: 57.9, lng: 9 }, arrival], 140_000, 11_000),
+      step('driving', pinned(arrival, kristiansand, 120), 1300, 110),
+    ]
+    const whole = steps.flatMap((st, i) => decodePolylineUncached(st.geometry).slice(i === 0 ? 0 : 1))
+    const body = (legs: unknown) => ({
+      code: 'Ok',
+      routes: [{ geometry: encodePolyline(whole), distance: 142_800, duration: 11_230, legs }],
+    })
+
+    it('reports the ferry as a span, with the geometry simplified span by span', async () => {
+      const fetch = vi.fn(() => answer(body([{ steps }])))
+      const { routeDrive } = createOsrmClient({ fetch: asFetch(fetch) })
+      const route = await routeDrive([hirtshals, kristiansand])
+      expect(route.distanceM).toBe(142_800)
+      expect(route.durationS).toBe(11_230)
+      const points = decodePolylineUncached(route.geometry)
+      expect(route.spans?.map((s) => s.mode)).toEqual(['drive', 'ferry', 'drive'])
+      const ferry = route.spans![1]
+      expect(points[ferry.from].lat).toBeCloseTo(port.lat, 4)
+      expect(points[ferry.to].lat).toBeCloseTo(arrival.lat, 4)
+      expect([ferry.distanceM, ferry.durationS]).toEqual([140_000, 11_000])
+      expect(route.spans![0].from).toBe(0)
+      expect(route.spans!.at(-1)!.to).toBe(points.length - 1)
+    })
+
+    it('finds the crossing in a real answer (Dover to Calais)', async () => {
+      const { routeDrive } = createOsrmClient({ fetch: asFetch(vi.fn(() => answer(doverCalais))) })
+      const route = await routeDrive([{ lat: 51.1279, lng: 1.3134 }, { lat: 50.9513, lng: 1.8587 }])
+      expect(route.spans?.map((s) => s.mode)).toEqual(['drive', 'ferry', 'drive'])
+      expect(route.distanceM).toBe(doverCalais.routes[0].distance)
+      const points = decodePolylineUncached(route.geometry)
+      expect(points.length).toBeLessThan(decodePolylineUncached(doverCalais.routes[0].geometry).length / 3)
+      expect(route.spans!.at(-1)!.to).toBe(points.length - 1)
+    })
+
+    it('has no spans without a ferry, without steps, or when the steps do not describe the route', async () => {
+      const driveOnly = [{ steps: [step('driving', road(lyon, annecy), 100, 10)] }]
+      for (const [legs, path] of [
+        [driveOnly, road(lyon, annecy)],
+        [[], whole],
+        [undefined, whole],
+        [[{ steps: 'nope' }], whole],
+        // Steps that trace some other road than the overview: not to be trusted.
+        [[{ steps: steps.map((st) => ({ ...st, geometry: encodePolyline(decodePolylineUncached(st.geometry).map((p) => ({ lat: p.lat + 1, lng: p.lng }))) })) }], whole],
+      ] as Array<[unknown, LatLng[]]>) {
+        const { routeDrive } = createOsrmClient({ fetch: asFetch(vi.fn(() => answer({ ...body(legs), routes: [{ ...body(legs).routes[0], geometry: encodePolyline(path) }] }))) })
+        const route = await routeDrive([lyon, annecy])
+        expect(route).not.toHaveProperty('spans')
+        expect(route.distanceM).toBe(142_800)
+      }
+    })
   })
 
   it('rejects with the reason for OSRM answers it cannot use', async () => {

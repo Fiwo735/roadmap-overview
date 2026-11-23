@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MODES } from '../../lib/modes'
+import { CASING_EDGE, haloDash, MODES } from '../../lib/modes'
 import { ERROR_COLOR, LOADING_COLOR, legStyle, type LegStyleInput } from './legStyle'
 
 const base: LegStyleInput = { mode: 'drive', straight: false, status: 'ok', hovered: false, selected: false }
@@ -14,6 +14,19 @@ describe('legStyle', () => {
 
   it('has no casing for modes without one', () => {
     expect(legStyle({ ...base, mode: 'flight' }).casing).toBeNull()
+  })
+
+  it('gives dashed modes a light, dashed halo (open gaps) and the solid drive line a dark solid casing', () => {
+    for (const mode of ['ferry', 'train'] as const) {
+      const { line, casing } = legStyle({ ...base, mode })
+      const halo = haloDash(MODES[mode].dashArray!)!
+      expect(casing).toMatchObject({ color: '#ffffff', lineCap: 'butt', dashArray: halo.dashArray, dashOffset: String(halo.dashOffset) })
+      expect(casing!.weight).toBe(line.weight! + 2 * CASING_EDGE)
+    }
+    const drive = legStyle(base).casing!
+    expect(drive).toMatchObject({ color: MODES.drive.casing, lineCap: 'round' })
+    expect(drive.dashArray).toBeUndefined()
+    expect(drive.dashOffset).toBeUndefined()
   })
 
   it('thickens on hover and a little more when selected', () => {

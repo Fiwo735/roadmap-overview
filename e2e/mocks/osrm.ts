@@ -65,6 +65,62 @@ export function wigglePath(a: LatLng, b: LatLng): LatLng[] {
 export interface FakeRouteOptions {
   geometries?: 'polyline' | 'geojson'
   overview?: 'full' | 'simplified' | 'false'
+  /** Include each leg's steps (`steps=true`), which is where a ferry crossing shows up. */
+  steps?: boolean
+}
+
+/**
+ * Where the mocked road ends at the crossing between Dover and Calais, on each side. The real OSRM
+ * demo server answers this pair with a "ferry"-mode step too (the Eurotunnel shuttle, Folkestone ⇄
+ * Coquelles); the Hirtshals ⇄ Kristiansand ferry it does not use (it drives around, 1 370 km).
+ */
+export const FERRY_PORTS = {
+  dover: { lat: 51.0953, lng: 1.1355 },
+  calais: { lat: 50.9279, lng: 1.797 },
+} as const
+
+/** The crossing takes 35 minutes (the real one: 2 089 s) and is not subject to the road factor. */
+export const FERRY_DURATION_S = 2_090
+const NEAR_PORT_M = 25_000
+
+/** Which end of the Dover ⇄ Calais crossing (if any) a point belongs to. */
+function ferryEnd(p: LatLng): keyof typeof FERRY_PORTS | null {
+  for (const end of ['dover', 'calais'] as const) {
+    if (haversineM(p, FERRY_PORTS[end]) < NEAR_PORT_M) return end
+  }
+  return null
+}
+
+interface FakeStep {
+  mode: 'driving' | 'ferry'
+  path: LatLng[]
+  distance: number
+  duration: number
+}
+
+const roundTenth = (n: number) => Math.round(n * 10) / 10
+
+function driveStep(a: LatLng, b: LatLng): FakeStep {
+  const distance = roundTenth(haversineM(a, b) * ROAD_FACTOR)
+  return { mode: 'driving', path: wigglePath(a, b), distance, duration: roundTenth((distance / 1000 / DRIVE_SPEED_KMH) * 3600) }
+}
+
+/**
+ * The steps of one leg: a plain drive, or — between the Dover and the Calais area, in
+ * either direction — a drive to the port, the ferry and a drive on from the other port.
+ */
+function legSteps(a: LatLng, b: LatLng): FakeStep[] {
+  const from = ferryEnd(a)
+  const to = ferryEnd(b)
+  if (!from || !to || from === to) return [driveStep(a, b)]
+  const portA = FERRY_PORTS[from]
+  const portB = FERRY_PORTS[to]
+  const crossing = [{ ...portA }, { lat: (portA.lat + portB.lat) / 2, lng: (portA.lng + portB.lng) / 2 }, { ...portB }]
+  return [
+    driveStep(a, portA),
+    { mode: 'ferry', path: crossing, distance: roundTenth(haversineM(portA, portB)), duration: FERRY_DURATION_S },
+    driveStep(portB, b),
+  ]
 }
 
 /** An OSRM `/route/v1/driving` response (code "Ok") through `points`, with one leg per segment. */
@@ -74,16 +130,34 @@ export function fakeRoute(points: LatLng[], options: FakeRouteOptions = {}) {
   let distance = 0
   let duration = 0
   for (let i = 0; i + 1 < points.length; i++) {
-    const path = wigglePath(points[i], points[i + 1])
-    full.push(...(i === 0 ? path : path.slice(1)))
-    const legDistance = Math.round(haversineM(points[i], points[i + 1]) * ROAD_FACTOR * 10) / 10
-    const legDuration = Math.round((legDistance / 1000 / DRIVE_SPEED_KMH) * 3600 * 10) / 10
+    const steps = legSteps(points[i], points[i + 1])
+    // Each step starts where the one before ended: the shared point is only listed once.
+    for (const step of steps) full.push(...(full.length === 0 ? step.path : step.path.slice(1)))
+    const legDistance = roundTenth(steps.reduce((sum, st) => sum + st.distance, 0))
+    const legDuration = roundTenth(steps.reduce((sum, st) => sum + st.duration, 0))
     distance += legDistance
     duration += legDuration
-    legs.push({ steps: [], summary: '', weight: legDuration, duration: legDuration, distance: legDistance })
+    legs.push({
+      steps: options.steps
+        ? steps.map((st) => ({
+            mode: st.mode,
+            distance: st.distance,
+            duration: st.duration,
+            weight: st.duration,
+            name: '',
+            geometry: encodePolyline(st.path),
+            maneuver: { type: 'turn', location: [st.path[0].lng, st.path[0].lat] },
+            intersections: [],
+          }))
+        : [],
+      summary: '',
+      weight: legDuration,
+      duration: legDuration,
+      distance: legDistance,
+    })
   }
-  distance = Math.round(distance * 10) / 10
-  duration = Math.round(duration * 10) / 10
+  distance = roundTenth(distance)
+  duration = roundTenth(duration)
 
   const geometry =
     options.geometries === 'geojson'

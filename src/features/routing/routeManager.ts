@@ -53,10 +53,10 @@ export function createRouteManager({ fetchRoute = routeDrive }: { fetchRoute?: F
     inflight.set(key, controller)
     setStatus(key, 'loading')
     fetchRoute(points, { signal: controller.signal, priority }).then(
-      ({ geometry, distanceM, durationS }) => {
+      ({ geometry, distanceM, durationS, spans }) => {
         if (inflight.get(key) !== controller) return
         inflight.delete(key)
-        setRoute({ key, geometry, distanceM, durationS, source: 'osrm' })
+        setRoute({ key, geometry, distanceM, durationS, source: 'osrm', ...(spans ? { spans } : {}) })
       },
       (error: unknown) => {
         if (inflight.get(key) !== controller) return

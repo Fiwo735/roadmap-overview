@@ -82,6 +82,27 @@ describe('getLegRoutes', () => {
     expect(routes().routes).toEqual({})
   })
 
+  it('draws each mode its own way: ferries and trains straight, flights along a great circle', () => {
+    const [a, b] = trip().trip.legs
+    const via = [{ lat: 45.2, lng: 5.9 }]
+    trip().updateLeg(a.id, { mode: 'ferry', via })
+    trip().updateLeg(b.id, { mode: 'flight' })
+    const [ferry, flight] = getLegRoutes()
+    expect(ferry.coords).toHaveLength(3)
+    expect(ferry.status).toBe('ok')
+    expect(flight.coords.length).toBeGreaterThan(30)
+    expect(flight.coords[0]).toEqual({ lat: 46, lng: 6 })
+    expect(flight.coords[flight.coords.length - 1]).toEqual({ lat: 47, lng: 7 })
+    // The flight's distance is measured along its geometry, which hugs the straight haversine distance.
+    expect(flight.route?.distanceM).toBeCloseTo(haversineM({ lat: 46, lng: 6 }, { lat: 47, lng: 7 }), -2)
+    // Switching the mode gives a different key (and so a different cached geometry).
+    expect(ferry.key).not.toBe(keyOf(1))
+    trip().updateLeg(a.id, { mode: 'train' })
+    expect(getLegRoutes()[0].route?.source).toBe('manual')
+    expect(getLegRoutes()[0].key).toContain('train')
+    expect(routes().routes).toEqual({})
+  })
+
   it('ignores a stored route under the key of a leg that needs no router', () => {
     const [a] = trip().trip.legs
     trip().updateLeg(a.id, { straight: true })

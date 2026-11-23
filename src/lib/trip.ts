@@ -37,6 +37,21 @@ export function parseDay(text: string): number | null {
   return /^\d{1,15}$/.test(t) ? normalizeDay(Number(t)) : null
 }
 
+/** Longest duration override accepted: 999 hours 59 minutes. */
+const MAX_DURATION_MIN = 999 * 60 + 59
+
+/**
+ * Parse what the user typed into the hours and minutes boxes of a leg's duration into whole minutes:
+ * plain digits only (an empty box counts as 0), and at least one minute in total. Minutes may exceed 59
+ * ("0 h 90 min" is 1 h 30 min). Returns null for anything else so the caller can revert.
+ */
+export function parseDurationMin(hours: string, minutes: string): number | null {
+  const [h, m] = [hours.trim(), minutes.trim()]
+  if (!/^\d{0,4}$/.test(h) || !/^\d{0,5}$/.test(m)) return null
+  const total = Number(h || 0) * 60 + Number(m || 0)
+  return total >= 1 && total <= MAX_DURATION_MIN ? total : null
+}
+
 /**
  * The day each place is effectively reached on (ARCHITECTURE.md "Days"): the typed day, but never
  * earlier than the effective day of the place before it.

@@ -1,4 +1,5 @@
 import { divIcon, marker as leafletMarker, polyline as leafletPolyline, type LeafletMouseEvent, type Map as LeafletMap, type Marker, type Polyline } from 'leaflet'
+import { greatCirclePathThrough } from '../../lib/greatCircle'
 import { MODES } from '../../lib/modes'
 import { nearestOnPath, viaInsertIndex } from '../../lib/nearest'
 import { useTripStore } from '../../store/tripStore'
@@ -145,11 +146,10 @@ export function createReshaper(
     const { via } = info.leg
     const before = index === 0 ? info.from : via[index - 1]
     const after = kind === 'move' ? (via[index + 1] ?? info.to) : (via[index] ?? info.to)
-    const path: [number, number][] = [
-      [before.lat, before.lng],
-      [point.lat, point.lng],
-      [after.lat, after.lng],
-    ]
+    // A flight bends along great circles, so does its preview.
+    const anchors = [before, point, after]
+    const through = info.leg.mode === 'flight' ? greatCirclePathThrough(anchors) : anchors
+    const path = through.map((p): [number, number] => [p.lat, p.lng])
     if (previewLine) {
       previewLine.setLatLngs(path)
       return

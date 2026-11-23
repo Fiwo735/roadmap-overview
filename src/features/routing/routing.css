@@ -105,3 +105,39 @@
 .map-tools .icon-btn + .icon-btn {
   border-top: 1px solid var(--border);
 }
+
+/* ---- Mode badges on the map ---------------------------------------------------------------- *
+ * A round disc in the mode's colour with a white icon, in the middle of a ferry/train/flight line
+ * and on each ferry crossing of a drive route. On the always-light tiles, so not themed.        */
+
+.leg-badge {
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.leg-badge__disc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--badge-color, #1a73e8);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.45);
+  color: #fff;
+  transition:
+    transform 120ms var(--ease),
+    box-shadow 120ms var(--ease),
+    opacity 120ms var(--ease);
+}
+
+.leg-badge.is-active .leg-badge__disc {
+  transform: scale(1.18);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.55);
+}
+
+.leg-badge.is-stale .leg-badge__disc {
+  opacity: 0.45;
+}

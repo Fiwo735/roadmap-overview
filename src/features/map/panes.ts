@@ -2,13 +2,14 @@ import type { Map as LeafletMap } from 'leaflet'
 
 /**
  * Leaflet pane names, bottom to top (draw order from ARCHITECTURE.md): tiles (Leaflet's own
- * tilePane, z 200), route casing, route lines, via-point handles, place markers, labels, ride
- * vehicle; popups and tooltips (Leaflet's own, z 650/700) stay above all of them.
+ * tilePane, z 200), route casing, route lines, leg mode badges, via-point handles, place markers,
+ * labels, ride vehicle; popups and tooltips (Leaflet's own, z 650/700) stay above all of them.
  * Pass the name as the `pane` option of any layer.
  */
 export const PANES = {
   routeCasing: 'ro-route-casing',
   route: 'ro-route',
+  routeBadges: 'ro-route-badges',
   via: 'ro-via',
   markers: 'ro-markers',
   labels: 'ro-labels',
@@ -20,6 +21,7 @@ export type PaneName = (typeof PANES)[keyof typeof PANES]
 const Z_INDEX: Record<PaneName, number> = {
   [PANES.routeCasing]: 410,
   [PANES.route]: 420,
+  [PANES.routeBadges]: 425,
   [PANES.via]: 430,
   [PANES.markers]: 450,
   [PANES.labels]: 460,

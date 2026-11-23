@@ -6,7 +6,9 @@ import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { IconButton } from '../components/IconButton'
 import { Menu, type MenuEntry } from '../components/Menu'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { Spinner } from '../components/Spinner'
+import { Switch } from '../components/Switch'
 import { ToastHost } from '../components/Toast'
 import { toast } from '../components/toast'
 import { ThemeToggle } from '../features/theme/ThemeToggle'
@@ -24,6 +26,8 @@ export function UiKit() {
   const [dialog, setDialog] = useState(false)
   const [mode, setMode] = useState('drive')
   const [last, setLast] = useState('')
+  const [segment, setSegment] = useState<'drive' | 'ferry' | 'train'>('drive')
+  const [follow, setFollow] = useState(true)
 
   const items: MenuEntry[] = [
     { id: 'open', label: 'Open trip…', icon: <FolderOpen size={16} />, shortcut: 'Ctrl+O', onSelect: () => setLast('open') },
@@ -94,6 +98,28 @@ export function UiKit() {
         />
         <span data-testid="menu-last">{last}</span>
         <span data-testid="menu-mode">{mode}</span>
+      </Section>
+
+      <Section title="Segmented control and switch">
+        <div style={{ width: 260 }}>
+          <SegmentedControl
+            label="Travel mode"
+            value={segment}
+            onChange={setSegment}
+            options={[
+              { value: 'drive', label: 'Drive' },
+              { value: 'ferry', label: 'Ferry', color: '#0891b2' },
+              { value: 'train', label: 'Train' },
+            ]}
+          />
+        </div>
+        <span data-testid="segment-value">{segment}</span>
+        <Switch checked={follow} onChange={setFollow} data-testid="kit-switch">
+          Follow roads
+        </Switch>
+        <Switch checked={false} onChange={() => undefined} disabled>
+          Unavailable
+        </Switch>
       </Section>
 
       <Section title="Dialog">

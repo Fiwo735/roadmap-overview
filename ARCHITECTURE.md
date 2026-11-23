@@ -52,18 +52,21 @@ src/
                              routeKey, modes, geoResult (Nominatim result → GeoResult, short name),
                              requestQueue (politeness queue), lru, nearest (point-to-path projection,
                              insert index, via-point index), simplify (Douglas–Peucker),
-                             manualRoute (routes that need no router)
+                             manualRoute (routes that need no router), greatCircle (flight arcs),
+                             routeSpans (ferry stretches from OSRM steps), legModes / legBadges (legend and badge placement)
   services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs), nominatim.ts, osrm.ts
   store/                     tripStore (undoable intent), uiStore, routeStore, persistence
   components/                shared UI primitives: Button, IconButton (+Tooltip), Menu, Dialog,
                              ContextMenu (a Menu opened at a point), Toast (+ the `toast` API in
-                             toast.ts), Spinner, portal.ts (portal target and modal stack)
+                             toast.ts), Spinner, SegmentedControl, Switch, portal.ts (portal target
+                             and modal stack)
   features/<name>/           one folder per feature:
     layout/                  TopBar, Sidebar, TripTitle, UndoRedoButtons, shortcuts, Logo
     map/                     MapView, panes, mapInstance (getMap/useLeafletMap), view helpers
     theme/                   ThemeToggle, theme.ts (init/choose)
     places/                  PlacesPanel (sortable list, search), PlacesLayer (markers, context menus)
-    legs/                    LegConnector (between place rows: leg summary; the mode editor builds on it)
+    legs/                    LegConnector (between place rows: leg summary + the selected leg's LegEditor),
+                             LegLegend (map legend), legActions, modeIcons
     routing/                 RouteManager (OSRM → route store), legRoutes (`getLegRoutes`/`useLegRoutes`),
                              RouteLayer + reshape (lines, via points, Google-Maps-style reshaping), MapTools
     stats/ io/ ride/ export-image/   slot placeholders until their feature lands
@@ -137,17 +140,17 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 | Service | Use | Rules we follow |
 | --- | --- | --- |
 | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution (map and exported image); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. |
-| `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=false&alternatives=false`; one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; geometry simplified (12 m) before caching. |
+| `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=true&alternatives=false` (the steps only tell where a route takes a ferry, see F3); one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; geometry simplified (12 m) before caching. |
 | `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
 
 Base URLs are constants in `src/services/config.ts` so they can be pointed elsewhere.
 
 ## Map conventions
 
-- Draw order (Leaflet panes, bottom → top): tiles, route casing, route lines, via-point
-  handles, place markers, labels, ride vehicle, popups/menus. Our panes are created in
-  `features/map/panes.ts` (`PANES.routeCasing | route | via | markers | labels | ride`); pass the
-  name as the `pane` option of a layer.
+- Draw order (Leaflet panes, bottom → top): tiles, route casing, route lines, leg mode badges,
+  via-point handles, place markers, labels, ride vehicle, popups/menus. Our panes are created in
+  `features/map/panes.ts` (`PANES.routeCasing | route | routeBadges | via | markers | labels | ride`);
+  pass the name as the `pane` option of a layer.
 - Place markers: numbered circular badges (marker pane) with a permanent short label (Leaflet
   tooltip in the labels pane, class `place-label`) beside each. Markers and labels are not themed:
   the tiles are always light, so they stay a white-ringed badge and a light pill on any tile.
@@ -156,7 +159,9 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
 - Route styling comes from `MODES` (`src/lib/modes.ts`) through `features/routing/legStyle.ts`: a
   darker casing under the line, thicker when hovered/selected; legs still routing show a thin grey
   dashed straight placeholder, failed ones a red dashed line, straight drive legs a dotted line.
-  Route and via-point layers are not themed (the tiles never are).
+  Ferry, train and flight legs use their own colour and dash (and casing, except flights) and carry a
+  round mode badge at the middle of the line, as does every ferry crossing inside a drive route (F3). Route, badge and via-point layers are not themed (the tiles
+  never are).
 - Map overlays are React components stacked above the map (not Leaflet popups), styled with the
   theme tokens. They live in `features/map/MapOverlays.tsx` as siblings of the Leaflet container,
   so pointer events never reach the map through them. Code outside the `MapContainer` reaches the
@@ -361,13 +366,13 @@ Each feature appends a short entry here: what it added, where it lives, anything
   (frozen, shared: copy before modifying). The array is the same object until places, legs or route
   store change. Legs that need no router (straight drive legs; F3's ferry/train/flight) are computed
   on demand by the pure `computeManualRoute(from, via, to, mode)` (`lib/manualRoute.ts`: straight
-  segments, haversine distance, `estimateDurationS`), remembered in an LRU by key, and are
-  **never** stored in the route store or autosaved. F3: add the great-circle/other shapes inside
-  `computeManualRoute`; `needsRouter` already follows `MODES[mode].routed`.
+  segments, great-circle arcs for flights since F3, distance along the drawn geometry,
+  `estimateDurationS`), remembered in an LRU by key, and are **never** stored in the route store or
+  autosaved. `needsRouter` follows `MODES[mode].routed`.
 - **Map layer** (`RouteLayer.tsx`, imperative Leaflet like the markers): per leg a casing polyline
   (route-casing pane), a line (route pane) and an invisible 18 px `route-hit` polyline that takes the
   pointer; elements carry `data-leg-id` and `data-role="route-casing|route-line|route-hit"` (tests
-  use them). Hover/selection only restyle (`setStyle`), never rebuild. Hover sets
+  use them; F3 adds `route-ferry-casing|route-ferry-line`, see there). Hover/selection only restyle (`setStyle`), never rebuild. Hover sets
   `ui.hoveredLegId` (mouse and pen only), a click selects the leg, a click on the empty map
   deselects, right-click is forwarded to the map's own context menu (so "Insert place here" works on
   a line).
@@ -396,11 +401,10 @@ Each feature appends a short entry here: what it added, where it lives, anything
   badge axis with the mode icon on it and "312 km · 3 h 40 min" (`effectiveDurationS`, so a duration
   override shows); spinner + "Routing…" while loading; on error the reason plus "Retry" and "Use
   straight line" (`updateLeg(id, { straight: true })`, one undo step). Hover and selection are
-  shared with the map; clicking selects the leg and fits the map to it (closing the mobile
-  slide-over); a leg selected on the map scrolls its connector into view. `data-status`,
-  `data-mode`, `data-hovered`, `data-selected` are on the connector. **F3:** the selected leg's mode
-  editor goes in the marked slot at the end of `LegConnector`; the summary reads everything from
-  `useLegRoutes()`.
+  shared with the map; clicking selects the leg and fits the map to it; a leg selected on the map
+  scrolls its connector into view. `data-status`, `data-mode`, `data-hovered`, `data-selected` are
+  on the connector. The selected leg's editor (F3) expands under the summary; the summary reads
+  everything from `useLegRoutes()`.
 - **Map tools** (`MapTools.tsx`): "Fit to trip" (places + all route points, `fitMapToTrip()` in
   `mapFit.ts`; `fitMapToLeg(id)` likewise) and a "Show labels" toggle (`ui.showLabels`;
   `PlacesLayer` mirrors it as the `hide-place-labels` class on the map container).
@@ -429,3 +433,78 @@ Each feature appends a short entry here: what it added, where it lives, anything
   add or move one); the in-memory route cache and the manual-route LRU are not pruned during a
   session (autosave only keeps the routes of current legs); OSRM is asked for one leg per second at
   most, so routing a long trip from scratch takes about a second per leg.
+
+### F3 — custom legs: ferry, train, flight, straight drives; ferry detection in drive routes
+
+- **Contract** (additive, file version stays 1): `RouteSpan` and the optional `LegRoute.spans`
+  (`types/trip.ts`): the ferry/drive stretches of a *routed* leg as inclusive indices into the decoded
+  geometry; when present they cover the whole geometry, each span starting where the previous ends.
+  `parseTripFile` keeps the route but drops spans that break that rule (warning "ferry sections").
+  Manual routes never have spans. `info.route?.spans` is how stats (ferry time) or the ride (slow
+  boat) can see crossings.
+- **Ferry detection** (`lib/routeSpans.ts`, `services/osrm.ts`): the request now has `steps=true`;
+  `spansFromSteps` turns the steps' `mode` into spans (`ferry` = ferry, every other mode = drive,
+  consecutive steps merged, the shared boundary point stored once) and traces the full-resolution
+  path from the step geometries; `simplifyWithSpans` simplifies each span on its own so the
+  boundaries survive. The traced path replaces the overview geometry only when a ferry was found and it
+  agrees with the overview (ends within 1 km, length within 5 %); otherwise nothing changes. Measured
+  on the real server: the step geometries concatenate to *exactly* the overview geometry, and
+  `steps=true` makes responses 4-8× larger (every step carries intersections): Dover→Calais 35 kB,
+  Hamburg→Hirtshals 100 kB, Hirtshals→Kristiansand 285 kB. **The demo server does not take the
+  Hirtshals→Kristiansand ferry** (it drives round: 1 374 km, no ferry step); Dover→Calais does use
+  the Eurotunnel shuttle as a `ferry` step (59 km, 35 min), so that real answer is the unit-test
+  fixture (`lib/fixtures/osrm-dover-calais.json`) and the e2e mock's ferry pair (`FERRY_PORTS`,
+  `FERRY_DURATION_S` in `e2e/mocks/osrm.ts`; `fakeRoute` returns steps when `steps=true`).
+- **Manual geometry** (`lib/manualRoute.ts`, `lib/greatCircle.ts`): `manualPath` = straight through
+  the via points (ferry, train, straight drive) or `greatCirclePathThrough` (flight: 64 segments per
+  arc, exact endpoints, longitudes continuous across the antimeridian so Leaflet draws one line).
+  Distance is the length along that geometry. `pointAlongPath` (`lib/geo.ts`) interpolates inside a
+  segment in Mercator y, i.e. the way Leaflet draws a straight line, so badges sit on the line.
+- **Leg editor** (`legs/LegEditor.tsx`, actions in `legActions.ts`): `SegmentedControl` for the mode,
+  `Switch` "Follow roads" (drive only; `straight`), duration in hours + minutes (committed on Enter or
+  when focus leaves the field, one undo step; `parseDurationMin`; "Reset to estimate" when overridden),
+  label, "Show on map", "Reset shape" (when there are via points). Leaving `drive` clears `straight` in
+  the same step. Via points mean different things on a road-routed leg (the road is forced through
+  them) and a hand-drawn one (the line is drawn through them), so a change between the two kinds
+  — mode switches and "Follow roads" alike (`needsRouter` before vs after) — drops them in the same
+  undo step; switching among ferry/train/flight/straight drive keeps them. The mode control has manual
+  activation (arrows and Home/End move the focus only; Enter, Space or a click choose), so keyboard
+  users create no intermediate undo steps or OSRM requests. Escape in the connector reverts the focused
+  field and closes the editor, a click elsewhere in the sidebar closes it (the map's own click already
+  did), and so does Escape anywhere that nothing else used and that is not another text field (Escape in
+  the trip title, a place's name or day belongs to that field). Clicking a connector no longer closes
+  the mobile slide-over (the editor is in it): the editor's "Show on map" (`showLegOnMap`) fits the
+  leg and closes the slide-over below 768 px. The duration hint says "Travel time from the route (incl.
+  ferry)" for a drive route with ferry spans.
+- **Map** (`RouteLayer.tsx`): a leg owns a casing + line for its own mode (or its driven stretches)
+  and a second casing + line for ferry spans (`data-role="route-ferry-casing|route-ferry-line"`, empty
+  polylines otherwise); hover/selection restyle both. Dashed modes (ferry, train) are cased in white
+  with a *dashed* casing (`haloDash` in `lib/modes.ts`: dashes grown by the casing edge, gaps shrunk,
+  pattern offset), so each dash has a halo and the gaps stay open; solid drive keeps its dark casing.
+  The legend swatches use the same rule. Mode badges are Leaflet markers in the new
+  `routeBadges` pane (below the via handles, so those stay grabbable), built from
+  `legBadgeSpots()`; icons are SVG strings (`modeIconSvg`, shapes copied from lucide, because
+  `react-dom/server` would add 60 kB gzipped). A click selects the leg. While a leg re-routes, its
+  stale line keeps its ferry pieces and badge (faded). The reshape preview of a flight is an arc.
+- **Legend** (`legs/LegLegend.tsx`, bottom-left slot in `MapOverlays`): `modesInUse()` over the legs,
+  shown when more than one mode is in use; ferry spans inside drive legs count as ferry. The
+  connector tags such a leg "incl. ferry".
+- **Shared components**: `SegmentedControl` (radio group, one tab stop, arrows/Home/End) and `Switch`
+  (`role="switch"`), both in the UI kit page and `e2e/components.spec.ts`.
+- **Tests**: Vitest for great circles, manual routes per mode, spans from steps (synthetic and the real
+  Dover→Calais answer), span-preserving simplification, span validation in `parseTripFile`, the OSRM
+  client with steps, the route manager passing spans on, badge spots, legend modes, duration parsing,
+  `pointAlongPath`, leg actions. `e2e/legs.spec.ts` (mocked): editor open/close, mode switch with
+  style/badge/estimate/undo (and no OSRM request), keyboard mode choice, flight arc, duration
+  override and reset, label, Follow roads off (dotted, no request), reshaping a ferry and a flight
+  (instant, no request), Reset shape, via points dropped/kept across mode switches, manual activation
+  of the mode control, "Show on map" (desktop and phone), Escape in other fields, badge click, legend,
+  ferry span from OSRM steps (style, badge, tag, hint, legend, reload without a request). The F1 test "rows can be reordered with the keyboard" now
+  waits for dnd-kit's own announcements (`DndLiveRegion`) instead of a transform, which raced the
+  collision update.
+- **Known gaps**: routes cached before F3 (autosave or an exported file) have no spans, so a drive leg
+  through a ferry shows no ferry stretch until it is routed again (a changed leg or a retry); only
+  ferry stretches are marked, not other non-road ones; the white halo of dashed lines is faint on very
+  pale tiles; the legend does not list the dotted "straight line" drive style; a flight across the
+  antimeridian is drawn on the far side of the map copy (`lng` beyond ±180); `steps=true` responses are
+  much bigger than before.

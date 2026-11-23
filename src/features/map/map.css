@@ -48,6 +48,13 @@
   align-items: flex-end;
 }
 
+.map-slot--bottom-left {
+  /* Above Leaflet's scale control (bottom-left corner of the map). */
+  bottom: 48px;
+  left: var(--space-3);
+  align-items: flex-start;
+}
+
 .map-slot--bottom-center {
   bottom: var(--space-5);
   left: 50%;

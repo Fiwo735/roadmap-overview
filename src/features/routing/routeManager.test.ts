@@ -79,6 +79,20 @@ describe('route manager', () => {
     expect(useTripStore.temporal.getState().pastStates).toHaveLength(3)
   })
 
+  it("keeps the ferry spans of an answer with the route (and adds none when there are none)", async () => {
+    addPlaces(3)
+    const { router } = start()
+    const spans = [
+      { mode: 'drive' as const, from: 0, to: 1, distanceM: 400, durationS: 30 },
+      { mode: 'ferry' as const, from: 1, to: 2, distanceM: 600, durationS: 90 },
+    ]
+    router.calls[0].resolve({ geometry: '_p~iF~ps|U_ulLnnqC_mqNvxq`@', distanceM: 1000, durationS: 120, spans })
+    answer(router.calls[1])
+    await flush()
+    expect(routes().routes[keyOf(0)].spans).toEqual(spans)
+    expect(routes().routes[keyOf(1)]).not.toHaveProperty('spans')
+  })
+
   it('skips legs that are already cached and legs that need no router', async () => {
     addPlaces(4)
     const legs = trip().trip.legs

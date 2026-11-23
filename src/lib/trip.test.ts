@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Leg } from '../types/trip'
-import { defaultDayAt, effectiveDays, isCalendarDate, isLegMode, normalizeDay, parseDay, syncLegs } from './trip'
+import { defaultDayAt, effectiveDays, isCalendarDate, isLegMode, normalizeDay, parseDay, parseDurationMin, syncLegs } from './trip'
 
 const place = (id: string, day = 0) => ({ id, day })
 const leg = (id: string, fromId: string, toId: string): Leg => ({ id, fromId, toId, mode: 'drive', via: [] })
@@ -35,6 +35,35 @@ describe('parseDay', () => {
 
   it.each(['', ' ', 'abc', '-1', '+3', '2.5', '1e3', '3 days', '1000000000000000', '٣'])('rejects %j', (text) => {
     expect(parseDay(text)).toBeNull()
+  })
+})
+
+describe('parseDurationMin', () => {
+  it.each([
+    ['3', '40', 220],
+    ['0', '45', 45],
+    ['', '30', 30],
+    ['2', '', 120],
+    [' 1 ', ' 5 ', 65],
+    ['0', '90', 90],
+    ['999', '59', 59_999],
+  ])('hours %j, minutes %j -> %i minutes', (hours, minutes, expected) => {
+    expect(parseDurationMin(hours, minutes)).toBe(expected)
+  })
+
+  it.each([
+    ['0', '0'],
+    ['', ''],
+    ['-1', '10'],
+    ['1.5', '0'],
+    ['1', '2.5'],
+    ['a', '10'],
+    ['1', 'x'],
+    ['10000', '0'],
+    ['1e2', '0'],
+    ['1000', '0'],
+  ])('rejects hours %j, minutes %j', (hours, minutes) => {
+    expect(parseDurationMin(hours, minutes)).toBeNull()
   })
 })
 

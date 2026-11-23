@@ -93,7 +93,7 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
       const points = parseCoordinates(match[1])
       const geometries = url.searchParams.get('geometries') === 'geojson' ? 'geojson' : 'polyline'
       const overview = (url.searchParams.get('overview') ?? 'simplified') as 'full' | 'simplified' | 'false'
-      return json(route, fakeRoute(points, { geometries, overview }))
+      return json(route, fakeRoute(points, { geometries, overview, steps: url.searchParams.get('steps') === 'true' }))
     } catch (err) {
       if (err instanceof OsrmError) return json(route, { code: err.code, message: err.code }, err.status)
       throw err

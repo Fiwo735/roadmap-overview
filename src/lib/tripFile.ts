@@ -3,6 +3,7 @@ import { haversineM, isValidLatLng } from './geo'
 import { newId } from './id'
 import { decodePolylineUncached } from './polyline'
 import { legRouteKey } from './routeKey'
+import { areValidSpans } from './routeSpans'
 import { DEFAULT_TRIP_TITLE, defaultDayAt, isCalendarDate, isLegMode, normalizeDay, syncLegs } from './trip'
 
 export const TRIP_FILE_FORMAT = 'roadmap-overview/trip'
@@ -161,7 +162,7 @@ const MAX_ENDPOINT_GAP_M = 25_000
 /** Longest geometry string worth decoding; real full-overview routes are far shorter. */
 const MAX_GEOMETRY_CHARS = 2_000_000
 
-type RouteCheck = { route: LegRoute } | { problem: string }
+type RouteCheck = { route: LegRoute; note?: string } | { problem: string }
 
 /** Validate a cached route against the leg it claims to belong to. */
 function parseRoute(raw: unknown, from: LatLng, to: LatLng): RouteCheck {
@@ -180,7 +181,14 @@ function parseRoute(raw: unknown, from: LatLng, to: LatLng): RouteCheck {
   if (haversineM(points[0], from) > MAX_ENDPOINT_GAP_M || haversineM(points[points.length - 1], to) > MAX_ENDPOINT_GAP_M) {
     return { problem: 'does not connect its two places' }
   }
-  return { route: { key, geometry, distanceM, durationS, source } }
+  const route: LegRoute = { key, geometry, distanceM, durationS, source }
+  // The ferry stretches only decorate the line: when they do not fit the geometry the route is
+  // still good, it just draws as one piece (and says so).
+  if (raw.spans !== undefined) {
+    if (!areValidSpans(raw.spans, points.length)) return { route, note: 'its ferry sections were invalid and were ignored' }
+    route.spans = raw.spans.map(({ mode, from, to, distanceM: d, durationS: t }) => ({ mode, from, to, distanceM: d, durationS: t }))
+  }
+  return { route }
 }
 
 function parseTrip(raw: unknown, warnings: string[]): Trip {
@@ -241,8 +249,12 @@ export function parseTripFile(input: unknown): ParseTripFileResult {
         // A different key just means the cache is stale (the leg changed): re-derive it quietly.
         if (isRecord(raw) && raw.key !== legRouteKey(from, to, leg)) return
         const checked = parseRoute(raw, from, to)
-        if ('route' in checked) routes[leg.id] = checked.route
-        else warnings.push(`Leg ${i + 1}: the saved route ${checked.problem}; it will be calculated again.`)
+        if ('route' in checked) {
+          routes[leg.id] = checked.route
+          if (checked.note) warnings.push(`Leg ${i + 1}: the saved route ${checked.note}.`)
+        } else {
+          warnings.push(`Leg ${i + 1}: the saved route ${checked.problem}; it will be calculated again.`)
+        }
       })
     }
 

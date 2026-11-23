@@ -240,13 +240,20 @@ test.describe('sorting', () => {
     await app.goto()
     await app.addPlaces('Lyon', 'Annecy', 'Zurich')
     const grip = rowOf(page, 'Annecy').getByTestId('place-grip')
+    // dnd-kit narrates every step in a live region (see `announcements` in PlacesPanel). Waiting for
+    // the sentence is waiting for dnd-kit's own state: the next key is only sent once the previous
+    // one has been processed, whatever the machine's speed (a drop that races the move would find
+    // the row still "over" itself and change nothing).
+    const status = page.locator('[id^="DndLiveRegion"]')
     await grip.focus()
     await page.keyboard.press('Space')
+    // (The pick-up sentence is replaced at once by this one: dnd-kit reports the row as over itself.)
+    await expect(status).toHaveText('Annecy is over position 2 of 3.')
     await expect(page.getByTestId('place-list')).toHaveAttribute('data-dragging', 'true')
     await page.keyboard.press('ArrowDown')
-    // Give dnd-kit a moment to settle on the new position before dropping.
-    await expect(rowOf(page, 'Annecy')).toHaveCSS('transform', /matrix\(1, 0, 0, 1, 0, [1-9]/)
+    await expect(status).toHaveText('Annecy is over position 3 of 3.')
     await page.keyboard.press('Space')
+    await expect(status).toHaveText('Annecy dropped at position 3 of 3.')
     await expect.poll(() => names(app)).toEqual(['Lyon', 'Zurich', 'Annecy'])
   })
 })

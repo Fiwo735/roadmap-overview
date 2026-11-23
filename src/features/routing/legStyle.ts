@@ -1,5 +1,5 @@
 import type { PathOptions } from 'leaflet'
-import { MODES, STRAIGHT_DRIVE_DASH } from '../../lib/modes'
+import { CASING_EDGE, haloDash, MODES, STRAIGHT_DRIVE_DASH } from '../../lib/modes'
 import type { LegMode } from '../../types/trip'
 import type { LegRouteStatus } from './legRoutes'
 
@@ -30,9 +30,6 @@ export interface LegStyle {
 /** Opacity of a previous route while its replacement is still being routed. */
 const STALE_OPACITY = 0.4
 
-/** Extra casing width on each side of the line, in px. */
-const CASING_EDGE = 2
-
 /** How the map draws a leg (ARCHITECTURE.md → Map conventions); hover and selection thicken the line. */
 export function legStyle({ mode, straight, status, stale = false, hovered, selected }: LegStyleInput): LegStyle {
   const meta = MODES[mode]
@@ -50,9 +47,18 @@ export function legStyle({ mode, straight, status, stale = false, hovered, selec
   // A straight drive leg is a dotted line in the drive colour: round caps turn the dash into a dot.
   const dotted = mode === 'drive' && straight
   const weight = (dotted ? 4 : meta.weight) + grow
+  const halo = meta.dashArray ? haloDash(meta.dashArray) : null
+  let casing: PathOptions | null = null
+  if (meta.casing && !dotted) {
+    const base = { color: meta.casing, weight: weight + 2 * CASING_EDGE, opacity: fade }
+    // A dashed line gets a dashed halo (the gaps stay open); a solid one a solid darker outline. The
+    // explicit `undefined`s clear a dash when the same polyline is restyled from dashed to solid.
+    casing = halo
+      ? { ...base, lineCap: 'butt', dashArray: halo.dashArray, dashOffset: String(halo.dashOffset) }
+      : { ...base, lineCap: 'round', dashArray: undefined, dashOffset: undefined }
+  }
   return {
-    casing:
-      meta.casing && !dotted ? { color: meta.casing, weight: weight + 2 * CASING_EDGE, opacity: fade, lineCap: 'round' } : null,
+    casing,
     line: {
       color: meta.color,
       weight,

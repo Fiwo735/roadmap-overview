@@ -323,6 +323,40 @@ describe('parseTripFile routes', () => {
     expect(Object.keys(ok(fileFor(trip, { l1: snapped })).file.routes ?? {})).toEqual(['l1'])
   })
 
+  describe('ferry spans', () => {
+    // route() draws a-mid-b: three points.
+    const spans = [
+      { mode: 'drive', from: 0, to: 1, distanceM: 400, durationS: 30 },
+      { mode: 'ferry', from: 1, to: 2, distanceM: 600, durationS: 30 },
+    ]
+
+    it('keeps the spans of a saved route (and nothing else it was not given)', () => {
+      const trip = sampleTrip()
+      const res = ok(fileFor(trip, { l1: { ...route(keyOf(trip, 0)), spans } }))
+      expect(res.file.routes?.l1.spans).toEqual(spans)
+      expect(res.warnings).toEqual([])
+      expect(ok(fileFor(trip, { l1: route(keyOf(trip, 0)) })).file.routes?.l1).not.toHaveProperty('spans')
+    })
+
+    it.each([
+      ['not a list', 'ferry'],
+      ['empty', []],
+      ['not covering the whole geometry', [spans[0]]],
+      ['overlapping', [spans[0], { ...spans[1], from: 0 }]],
+      ['out of the geometry', [spans[0], { ...spans[1], to: 9 }]],
+      ['an unknown mode', [{ ...spans[0], mode: 'train' }, spans[1]]],
+      ['carrying bad numbers', [spans[0], { ...spans[1], distanceM: -5 }]],
+      ['containing things that are not spans', [null, 5, 'ferry', [spans[0]]]],
+      ['missing their numbers', [{ mode: 'drive' }, { mode: 'ferry' }]],
+    ])('keeps the route but drops spans that are %s, with a warning', (_label, bad) => {
+      const trip = sampleTrip()
+      const res = ok(fileFor(trip, { l1: { ...route(keyOf(trip, 0)), spans: bad } }))
+      expect(res.file.routes?.l1).toBeDefined()
+      expect(res.file.routes?.l1).not.toHaveProperty('spans')
+      expect(res.warnings.some((w) => w.startsWith('Leg 1') && w.includes('ferry sections'))).toBe(true)
+    })
+  })
+
   it('tolerates a missing or non-object routes field, and ids like __proto__', () => {
     const file = fileFor(sampleTrip())
     delete file.routes
