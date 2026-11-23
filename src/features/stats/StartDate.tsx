@@ -4,6 +4,7 @@ import { IconButton } from '../../components/IconButton'
 import { isCalendarDate } from '../../lib/trip'
 import { useTripStore } from '../../store/tripStore'
 import { formatDateRange } from './dateRange'
+import { useEditingLocked } from '../ride/rideStore'
 
 /** Dates typed digit by digit pass through years such as 0002 and 0202; those are not trips. */
 const isPlausible = (date: string) => isCalendarDate(date) && Number(date.slice(0, 4)) >= 1900
@@ -15,6 +16,8 @@ const isPlausible = (date: string) => isCalendarDate(date) && Number(date.slice(
  * (one undo step per edit, however many segments of the field were changed), Escape discards it.
  */
 export function StartDate({ days }: { days: number }) {
+  // A ride locks every editing surface (F6).
+  const locked = useEditingLocked()
   const startDate = useTripStore((s) => s.trip.startDate)
   const setStartDate = useTripStore((s) => s.setStartDate)
   const [draft, setDraft] = useState<string | null>(null)
@@ -90,8 +93,10 @@ export function StartDate({ days }: { days: number }) {
       type="button"
       className={['start-date', range ? '' : 'is-empty'].filter(Boolean).join(' ')}
       data-testid="start-date"
-      aria-label={range ? `Trip dates: ${range}. Click to change` : 'Add a start date'}
+      aria-label={range ? `Trip dates: ${range}${locked ? '' : '. Click to change'}` : 'Add a start date'}
+      aria-disabled={locked || undefined}
       onClick={() => {
+        if (locked) return
         closing.current = false
         setDraft(startDate ?? '')
       }}

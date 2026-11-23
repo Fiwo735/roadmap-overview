@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { useTripStore } from '../../store/tripStore'
+import { useEditingLocked } from '../ride/rideStore'
 
 /**
  * Inline-editable trip title. Typing only changes local state; the store (and so the undo history)
@@ -9,6 +10,8 @@ export function TripTitle() {
   const title = useTripStore((s) => s.trip.title)
   const setTitle = useTripStore((s) => s.setTitle)
   const [draft, setDraft] = useState<string | null>(null)
+  // Read-only while editing is locked (a ride is on): the title is part of the trip the ride was made from.
+  const locked = useEditingLocked()
   // Escape blurs the input, and blur commits: this flag makes that blur discard instead.
   const cancelled = useRef(false)
 
@@ -27,6 +30,8 @@ export function TripTitle() {
       value={draft ?? title}
       maxLength={120}
       spellCheck={false}
+      readOnly={locked}
+      aria-readonly={locked || undefined}
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}

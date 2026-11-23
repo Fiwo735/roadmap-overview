@@ -76,7 +76,9 @@ src/
     stats/                   title/statistics card (StatsOverlay → TripCard | TripPill), computeStats,
                              countries (+ countryIndex, worldIndex, countryData), flags, dateRange, samplePath
     io/                      FileMenu (top bar), import/export actions, drop overlay, start-up links (F5)
-    ride/ export-image/      slot placeholders until their feature lands
+    ride/                    RideButton, RideHud (day, leg, controls), RideLayer + rideScene (van, trail, camera),
+                             rideStore (playback + controls), timeline (the pure ride clock), camera, vehicles
+    export-image/            slot placeholder until its feature lands
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
@@ -139,8 +141,9 @@ See `src/types/trip.ts`. Key rules:
   sample, "New trip") go to a ring of up to five in `localStorage["roadmap-overview:v1:recent"]`
   (`store/recentTrips.ts`, F5).
 - **Debug hook.** In dev builds `window.__ROADMAP__` exposes the stores (`trip`, `ui`, `routes`,
-  each a Zustand store; `trip.temporal` is the undo history) and `getMap()` (the Leaflet map) so
-  Playwright and humans can inspect and drive state programmatically. Stripped from production.
+  each a Zustand store; `trip.temporal` is the undo history), `getMap()` (the Leaflet map) and, once the
+  top bar has mounted, `ride` (the ride's store and controls, F6) so Playwright and humans can inspect
+  and drive state programmatically. Stripped from production.
 
 ## External services (and their usage policies)
 
@@ -157,9 +160,10 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
 
 ## Map conventions
 
-- Draw order (Leaflet panes, bottom → top): tiles, route casing, route lines, leg mode badges,
-  via-point handles, place markers, labels, ride vehicle, popups/menus. Our panes are created in
-  `features/map/panes.ts` (`PANES.routeCasing | route | routeBadges | via | markers | labels | ride`);
+- Draw order (Leaflet panes, bottom → top): tiles, route casing, route lines, ride trail, leg mode
+  badges, via-point handles, ride stop halos, place markers, labels, ride vehicle, popups/menus. Our
+  panes are created in `features/map/panes.ts`
+  (`PANES.routeCasing | route | rideTrail | routeBadges | via | rideStops | markers | labels | ride`);
   pass the name as the `pane` option of a layer.
 - Place markers: numbered circular badges (marker pane) with a permanent short label (Leaflet
   tooltip in the labels pane, class `place-label`) beside each. Markers and labels are not themed:
@@ -718,3 +722,103 @@ Each feature appends a short entry here: what it added, where it lives, anything
   5 MB check; a server that refuses cross-origin reads looks like an unreachable one; drops are covered
   with synthetic drag events, not a real OS file drag; the sample is a static file, not bundled, so it
   needs the network (or a cached copy) once.
+
+### F6 — ride: a campervan driving the trip, day by day
+
+- **Timeline** (`features/ride/timeline.ts`, pure and unit-tested; time is seconds at 1× speed). Built from the
+  places' *effective* days and the leg geometries (`getLegRoutes()`: decoded coords, `route.spans`, the
+  route's own `distanceM`). Leg `i` is travelled on day `eff[i + 1]`; every day from `eff[0]` to `eff[last]`
+  has a slot: a **travel day** (≥ 1 leg) takes 2.5 s, shared by its legs in proportion to their length with
+  a floor of 12 % (`legShares`); a **rest day** takes 0.6 s, but a run of consecutive rest days is capped at
+  4 s in total (so "day 400" is not minutes of a parked van) and is stored as one slot: **nothing loops over
+  days**, so absurd day numbers cost nothing. The ride starts on the first place's day (a rest slot when no
+  leg is travelled that day) and ends with the last leg. `sampleTimeline(tl, t)` →
+  `{ day, date?, legIndex | null, position, heading, mode, distanceM, placeIndex, legProgress, resting,
+  finished }`; `date` = `startDate` + (day − first day), i.e. the first *effective* day is the day
+  `startDate` names. `mode` is the leg's mode, `ferry` on a ferry span of a drive leg, the van on rest
+  days. `distanceM` sums the routes' own lengths (what the sidebar shows) plus the fraction of the current leg.
+  `lib/pathAlong.ts` holds the interpolation (cumulative lengths + binary search, Mercator-correct inside a
+  segment like `pointAlongPath`, exact at vertices), the screen-space heading (smoothed over ±1.5 km) and
+  `clipPath` (the travelled part of a leg with its spans clipped). `stepDay`, `timeOfDay`, `dayTicks` and
+  `nextStepTime` (reduced motion) serve the controls.
+- **Store and loop** (`rideStore.ts`): `useRideStore` = `{ active, playing, speed, follow, time, timeline,
+  placeIndex }` (not undoable, not saved; `speed` and `follow` last for the session) plus plain functions
+  (`startRide`, `closeRide`, `toggleRide`, `seekRide`, `stepRideDay`, …; `rideDebug` for tests).
+  `isEditingLocked()` / `useEditingLocked()` is **the one switch every editing surface consults** (see
+  Locking). One `requestAnimationFrame` loop advances `time`
+  (frame step capped at 0.1 s); a hidden tab pauses it and showing the tab resumes it; with
+  `prefers-reduced-motion` playback **steps** (one slot per 1.1 s at 1×) and the follow camera jumps instead
+  of gliding. `rideSample()` memoises the last sample, so the loop, HUD and map share it. The ride is made
+  from the trip as it was when it started: while it runs, a change of the places, legs or routes
+  **rebuilds the timeline and carries on from the same time** (nothing is rebuilt for a rename), a
+  different `trip.id` or fewer than two places **ends** it with `closeRide({ keepView: true })`: the map is
+  then left as whatever replaced the trip (a file that was opened and fitted the map) left it, whereas a
+  ride the user closes (`closeRide()`) puts the view from before back (`keepView` in the store tells the
+  map layer which). `startRide` also collapses what the locked
+  sidebar would keep open (row search/rename, the selected leg's editor, the mobile slide-over). Fewer than
+  two places, or a leg still `loading`, disables the button (`aria-disabled`, reason as tooltip and
+  `aria-describedby`); a leg that failed to route rides its straight placeholder.
+- **Locking** — nothing is rewritten, it is switched off: `rideScene` puts the HTML `inert` attribute on the
+  marker, via-handle, badge and route (hit-line) panes, so markers cannot be dragged, focused or
+  right-clicked and no handle appears on a line; `PlacesPanel` sets `inert` on the whole list (rows, day
+  fields, menus, leg editor, search box); `PlacesLayer` ignores the map's right-click; undo/redo buttons and
+  shortcuts are off; the top-bar trip title is `readOnly`. All of these ask **`isEditingLocked()`** (event
+  handlers) or **`useEditingLocked()`** (components), exported from `ride/rideStore.ts`: true exactly while a
+  ride is on. **Any surface that edits the trip — including ones added later, such as the map's title card
+  or file actions — must consult it** (disable the control or make the field read-only) rather than
+  look at ride internals. Any trip change that still gets through is handled by the rebuild/close rule above.
+- **Map** (`rideScene.ts`, mounted by `RideLayer` only while a ride is on; `destroy()` restores the view, the
+  panes and the container class): the vehicle is a Leaflet marker in the `ride` pane with an SVG per
+  vehicle (`vehicles.ts`: campervan, ferry, train, plane; all side views facing east, ~56 × 35 px). It
+  **mirrors** to face west — `nextFacing()` turns only once the heading is ≥ 15° past north/south, so
+  wiggly roads do not flip it — and is never rotated. Wheels spin and the body bobs while it moves;
+  parked (rest day, the end) it stands beside its stop's badge. A small "Day N" tag rides above it.
+  The planned-route panes get `.ride-dimmed` (opacity); the **trail** (legs travelled plus the part of the
+  current one) is drawn in the `rideTrail` pane with `legStyle(…, selected: true)` per mode — ferry
+  stretches of a drive leg in the ferry style — as two sets of polylines: finished legs (rebuilt only when one
+  more completes) and the current leg (clipped every frame). **Stop halos** (`rideStops` pane, under the
+  badges): a green ring once reached, pulsing while parked there. In the sidebar `PlaceRow` carries
+  `data-ride="current|reached"` (`current` = the last place reached) and the HUD scrolls it into view.
+- **Camera**: without Follow the whole trip is fitted once (bottom padding for the HUD); with Follow the map
+  flies to the van at **one zoom for the whole ride** (the median, over travel days, of the zoom that
+  fits a day's legs; clamped to 4 … 12), so it cannot ping-pong. After that it **moves rarely**: nothing
+  while the van is inside a comfort box (the middle 40 % of the width, at most the middle 50 % of the
+  height, 56 px clear of the HUD), then ONE eased `panBy` glide (1.6 s) that brings the van well back
+  inside, aimed at where it will be when the glide ends and leaned back against its direction of travel
+  (`glideOffset`), so a ride costs a handful of pans instead of one per frame. This matters because every
+  map move ends in a `moveend`, which makes Leaflet re-clip and redraw every polyline: panning each frame
+  cost ~6 ms per pan on a 27-place trip (measured: ~230 `moveend`s per 5 s, p95 frame 33 ms; with glides
+  ~3 per 5 s, p95 16.7 ms). A van outside the view (seek, restart) is jumped to; with reduced motion moves
+  are instant. Dragging the map hands the camera to the user (Follow turns off, no refit); switching Follow
+  off refits the trip; the user's own zooming is left alone. `camera.ts` has the pure parts. When the user
+  closes the ride the view from before it comes back (not after a trip change, see Store).
+- **HUD** (`RideHud.tsx`, `ride.css`, bottom-centre slot, themed): big "Day N" (+ the date when the trip has a
+  `startDate`), the current leg and vehicle ("Lyon → Annecy · Ferry"), "Resting in …", "Arrived in …",
+  distance so far of total, "Stop 2 of 5", a scrubber (native range input) with a tick per day (labelled up
+  to 14, thinned to about 60 for long trips) and a dot per stop, previous/next day, play/pause/replay,
+  restart, speed (0.5×–4×, a `SegmentedControl`), Follow, close. Focus moves to play on start and back to
+  the Ride button on close. Keys (capture phase on `window`, so Leaflet's own arrow-key panning never sees
+  them): Space, ←/→ = previous/next day (the start of it), Escape; ignored in text fields, menus, the speed
+  buttons and while a dialog is open. Holding the scrubber pauses; letting go resumes, wherever the pointer is then (the release is listened
+  for on `window`, so a drag that ends over the map or the sidebar still resumes). Below 768 px the
+  zoom control is hidden while the HUD is up and the Ride button is icon-only; the leg legend is hidden
+  below 1260 px. There is no `backdrop-filter` on the HUD: it made every frame of the ride pay for a blur
+  in software rendering.
+- **Shared-code changes**: `lib/geo.ts` exports `mercatorY` / `latFromMercatorY` / `MAX_MERCATOR_LAT`;
+  `panes.ts` has the `rideTrail` and `rideStops` panes; `PlacesPanel`, `PlaceRow`, `PlacesLayer`,
+  `UndoRedoButtons`, `TripTitle` and `shortcuts.ts` consult `isEditingLocked()` / `useEditingLocked()` (a
+  few lines each). `types/trip.ts` is unchanged.
+- **Tests**: Vitest for the path helpers, the timeline (several legs on a day, rest days and runs, out-of-order
+  days, zero-length legs, a single place, ferry spans, dates, day stepping, reduced-motion steps, tick
+  thinning, absurd day numbers), the camera maths, the HUD texts and the store (start/stop, controls, trip
+  changes mid-ride). `e2e/ride.spec.ts` (mocked services): button states, the day advancing in real time,
+  the van following the route and matching the model to within pixels, distance/date/rest days, facing,
+  ferry/train/flight vehicles, trail/dimming/halos/sidebar highlight, pause/seek/scrub/keyboard/restart/
+  close, releasing the scrubber outside the slider, locked editing (drag, reshape, right-click, list, undo,
+  the title) and its restoration, trip changes mid-ride (and the map staying as the new trip left it),
+  Follow (in view above the HUD, steady zoom, few `moveend`s, a drag hands the camera over), hidden tab,
+  reduced motion.
+- **Known gaps**: the van moves at a constant speed through its day's slot, so leg durations (user overrides,
+  ferry times) do not shape the timing; a rest day is always the van parked (also after a flight or a
+  train); opening a file while a ride runs rebuilds or ends it by the rule above (the file feature can call
+  `closeRide()` first for a cleaner hand-over); the per-frame trail clip is O(points of the current leg).

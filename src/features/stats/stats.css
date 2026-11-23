@@ -304,3 +304,11 @@ button.start-date:hover {
   color: var(--text-faint);
   font-weight: 500;
 }
+
+/* While a ride runs (F6), the card's texts are read-only: no edit affordance. */
+.inline-text[aria-disabled='true'],
+.start-date[aria-disabled='true'] {
+  cursor: default;
+  background: transparent;
+  box-shadow: none;
+}

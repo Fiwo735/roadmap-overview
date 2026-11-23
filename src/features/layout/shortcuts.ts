@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { redo, undo } from '../../store/tripStore'
+import { isEditingLocked } from '../ride/rideStore'
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
@@ -24,6 +25,7 @@ export function useUndoRedoShortcuts(): void {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || isTextEntry(e.target)) return
       if (document.querySelector('dialog[open]')) return
+      if (isEditingLocked()) return
       const key = e.key.toLowerCase()
       if (key === 'z') {
         e.preventDefault()

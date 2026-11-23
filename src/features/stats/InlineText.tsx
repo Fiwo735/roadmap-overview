@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useEditingLocked } from '../ride/rideStore'
 
 interface InlineTextProps {
   value: string
@@ -21,6 +22,8 @@ interface InlineTextProps {
  */
 export function InlineText({ value, placeholder, onCommit, label, className, maxLength = 120, testId }: InlineTextProps) {
   const [draft, setDraft] = useState<string | null>(null)
+  // A ride locks every editing surface (F6): the text stays readable but can't be opened.
+  const locked = useEditingLocked()
   const display = useRef<HTMLButtonElement>(null)
   // Escape blurs the field and blur commits: this flag makes that blur discard instead.
   const cancelled = useRef(false)
@@ -77,10 +80,11 @@ export function InlineText({ value, placeholder, onCommit, label, className, max
       type="button"
       className={['inline-text', value ? '' : 'is-empty', className].filter(Boolean).join(' ')}
       data-testid={testId}
-      aria-label={`${label}: ${value || 'not set'}. Click to edit`}
+      aria-label={locked ? `${label}: ${value || 'not set'}` : `${label}: ${value || 'not set'}. Click to edit`}
+      aria-disabled={locked || undefined}
       // The text may be clamped to a few lines by the stylesheet: the full text is one hover away.
       title={value || undefined}
-      onClick={() => setDraft(value)}
+      onClick={locked ? undefined : () => setDraft(value)}
     >
       <span className="inline-text__text">{value || placeholder}</span>
     </button>

@@ -1,0 +1,512 @@
+/* ---- Top bar button ------------------------------------------------------------------------- */
+
+.ride-button[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ride-button[aria-disabled='true']:hover {
+  background: var(--accent);
+}
+
+/* A ride in progress: the button reads as pressed, with a ring. */
+.ride-button[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    var(--shadow-sm);
+}
+
+@media (max-width: 600px) {
+  /* Icon only on a phone: the label stays for screen readers. */
+  .ride-button {
+    padding: 0 var(--space-3);
+  }
+
+  .ride-button__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* The title is read-only while editing is locked. */
+.trip-title[readonly] {
+  cursor: default;
+}
+
+/* ---- The map while riding ------------------------------------------------------------------- */
+
+/* The planned route stays as a faint guide under the emphasised trail (its own pane). */
+.ride-dimmed {
+  opacity: 0.38;
+  transition: opacity 300ms var(--ease);
+}
+
+.ride-vehicle-wrap,
+.ride-halo-wrap {
+  border: 0;
+  background: none;
+  pointer-events: none;
+}
+
+/* The vehicle: a white halo and a soft shadow so it reads on any tile. Facing west mirrors it. */
+.ride-vehicle {
+  width: 56px;
+  height: 35px;
+  filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 3px 3px rgba(15, 23, 42, 0.35));
+}
+
+.ride-vehicle {
+  transition: transform 260ms var(--ease);
+}
+
+.ride-vehicle[data-facing='west'] {
+  transform: scaleX(-1);
+}
+
+.ride-vehicle[data-parked='true'] {
+  transform: translateY(-17px);
+}
+
+.ride-vehicle[data-parked='true'][data-facing='west'] {
+  transform: translateY(-17px) scaleX(-1);
+}
+
+/* The day, riding along above the vehicle (it is not mirrored with the vehicle). */
+.ride-day-tag {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  margin-bottom: 1px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.18),
+    0 2px 6px rgba(15, 23, 42, 0.3);
+  color: #18212f;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  transition: transform 260ms var(--ease);
+}
+
+.ride-day-tag[data-parked] {
+  transform: translate(-50%, -17px);
+}
+
+.ride-vehicle .ride-art {
+  display: block;
+  overflow: visible;
+}
+
+.ride-vehicle[data-moving='true'] .ride-art {
+  animation: ride-bob 0.46s ease-in-out infinite;
+}
+
+.ride-vehicle[data-moving='true'] .ride-wheel {
+  animation: ride-spin 0.5s linear infinite;
+}
+
+.ride-vehicle[data-moving='true'][data-vehicle='ferry'] .ride-art {
+  animation-name: ride-bob-sea;
+  animation-duration: 1.6s;
+}
+
+.ride-vehicle[data-moving='true'][data-vehicle='flight'] .ride-art {
+  animation-name: ride-bob-sea;
+  animation-duration: 2.2s;
+}
+
+@keyframes ride-bob {
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+@keyframes ride-bob-sea {
+  50% {
+    transform: translateY(-2.5px) rotate(-1.2deg);
+  }
+}
+
+@keyframes ride-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Stops: a ring under the numbered badge, green once the van has been there; the current one pulses. */
+.ride-halo {
+  display: block;
+  width: 46px;
+  height: 46px;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  transform: scale(0.7);
+  opacity: 0;
+  transition:
+    transform 280ms var(--ease),
+    opacity 280ms var(--ease);
+}
+
+.ride-halo[data-state='reached'],
+.ride-halo[data-state='current'] {
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.2);
+  transform: scale(1);
+  opacity: 1;
+}
+
+.ride-halo[data-state='current'] {
+  animation: ride-pulse 1.6s ease-out infinite;
+}
+
+@keyframes ride-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(22, 163, 74, 0);
+  }
+}
+
+/* ---- The list while riding: read-only, with the van's place highlighted ------------------------- */
+
+.places[inert] .place-row__grip,
+.places[inert] .place-row .icon-btn,
+.places[inert] .day-field,
+.places[inert] .places__add {
+  opacity: 0.45;
+}
+
+.place-card[data-ride='current'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 0 4px var(--accent-soft);
+}
+
+.place-card[data-ride='reached'] .place-badge {
+  background: var(--success);
+}
+
+/* ---- The ride controls (bottom-centre) ---------------------------------------------------------- */
+
+.map-area:has(.ride-hud) .map-slot--bottom-center {
+  width: min(680px, calc(100% - 2 * var(--space-3)));
+}
+
+.ride-hud {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+}
+
+.ride-hud__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.ride-hud__day {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--space-3);
+  white-space: nowrap;
+}
+
+.ride-hud__day-number {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ride-hud__date {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.ride-hud__where {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 600;
+}
+
+.ride-hud__mode {
+  --mode-color: var(--text-muted);
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mode-color) 16%, transparent);
+  color: var(--mode-color);
+}
+
+/* The mode colours are the always-light map's; in dark mode lift them towards the text colour to stay legible. */
+:root[data-theme='dark'] .ride-hud__mode {
+  color: color-mix(in srgb, var(--mode-color) 55%, var(--text));
+}
+
+.ride-hud__caption {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ride-hud__vehicle {
+  flex: none;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.ride-hud__stats {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.ride-hud__of,
+.ride-hud__dot {
+  color: var(--text-muted);
+}
+
+.ride-hud__dot {
+  margin: 0 var(--space-2);
+}
+
+/* Scrubber: a track with day ticks beneath it and a dot where each stop is reached. */
+.ride-scrub {
+  --ride-thumb: 16px;
+  position: relative;
+  height: 34px;
+}
+
+.ride-scrub__track {
+  position: absolute;
+  top: 7px;
+  right: 0;
+  left: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) 0 var(--ride-progress), var(--surface-3) var(--ride-progress) 100%);
+}
+
+.ride-scrub__marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ride-scrub__tick {
+  position: absolute;
+  top: 18px;
+  width: 1px;
+  height: 5px;
+  background: var(--border-strong);
+  transform: translateX(-50%);
+}
+
+.ride-scrub__tick-label {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+}
+
+.ride-scrub__stop {
+  position: absolute;
+  top: 10px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  transform: translate(-50%, -50%);
+}
+
+.ride-scrub__stop[data-reached] {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.ride-scrub__input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.ride-scrub__input:focus-visible {
+  outline: none;
+}
+
+.ride-scrub__input::-webkit-slider-runnable-track {
+  height: 20px;
+  background: transparent;
+}
+
+.ride-scrub__input::-moz-range-track {
+  height: 20px;
+  background: transparent;
+}
+
+.ride-scrub__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--ride-thumb);
+  height: var(--ride-thumb);
+  margin-top: 2px;
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.ride-scrub__input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--ride-thumb);
+  height: var(--ride-thumb);
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.ride-scrub__input:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+
+.ride-scrub__input:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+
+.ride-hud__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.ride-hud__group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ride-hud__group:last-child {
+  gap: var(--space-1);
+}
+
+.icon-btn.ride-hud__play {
+  width: 44px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-sm);
+}
+
+.icon-btn.ride-hud__play:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--accent-contrast);
+}
+
+.icon-btn.ride-hud__play:active:not(:disabled) {
+  background: var(--accent-active);
+}
+
+.ride-hud__speed {
+  width: 156px;
+}
+
+/* ---- Make room: on a narrower window the ride controls take the corner's other overlays' place ----- */
+
+@media (max-width: 1260px) {
+  .map-area:has(.ride-hud) .map-slot--bottom-left {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .map-area:has(.ride-hud) .leaflet-control-zoom {
+    display: none;
+  }
+
+  .ride-hud {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .ride-hud__day-number {
+    font-size: 22px;
+  }
+
+  .ride-hud__vehicle,
+  .ride-hud__of {
+    display: none;
+  }
+
+  .ride-hud__controls {
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ride-vehicle .ride-art,
+  .ride-vehicle .ride-wheel,
+  .ride-halo[data-state='current'] {
+    animation: none !important;
+  }
+
+  .ride-halo,
+  .ride-dimmed,
+  .ride-day-tag,
+  .ride-vehicle {
+    transition: none;
+  }
+}

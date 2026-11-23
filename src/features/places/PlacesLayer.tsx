@@ -6,6 +6,7 @@ import { ContextMenu } from '../../components/ContextMenu'
 import type { MenuEntry } from '../../components/Menu'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
+import { isEditingLocked } from '../ride/rideStore'
 import type { LatLng, Place } from '../../types/trip'
 import { PANES } from '../map/panes'
 import { layoutLabels } from './labelLayout'
@@ -213,8 +214,11 @@ export function PlacesLayer() {
 
   // Map-level interaction: right-click menu, click on empty map clears the selection.
   useEffect(() => {
-    const onContextMenu = (e: LeafletMouseEvent) =>
+    // No editing menus while editing is locked (a ride is on, F6).
+    const onContextMenu = (e: LeafletMouseEvent) => {
+      if (isEditingLocked()) return
       setMenu({ kind: 'map', x: e.originalEvent.clientX, y: e.originalEvent.clientY, at: e.latlng })
+    }
     const onClick = () => useUiStore.getState().selectPlace(null)
     map.on('contextmenu', onContextMenu)
     map.on('click', onClick)

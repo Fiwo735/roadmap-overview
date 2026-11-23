@@ -18,6 +18,7 @@ import { effectiveDays } from '../../lib/trip'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
 import { loadSampleTrip } from '../io/importTrip'
+import { useEditingLocked } from '../ride/rideStore'
 import { PlaceRow } from './PlaceRow'
 import { PlaceSearch } from './PlaceSearch'
 import { displayName } from './names'
@@ -36,6 +37,8 @@ const SCREEN_READER = {
 export function PlacesPanel() {
   const places = useTripStore((s) => s.trip.places)
   const selectedId = useUiStore((s) => s.selectedPlaceId)
+  // The list is read-only while editing is locked (a ride is on, F6): nothing in it can be focused or clicked.
+  const locked = useEditingLocked()
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const addRef = useRef<HTMLDivElement>(null)
@@ -79,7 +82,7 @@ export function PlacesPanel() {
   }
 
   return (
-    <section className="places" aria-labelledby="places-heading" data-testid="places-panel">
+    <section className="places" aria-labelledby="places-heading" data-testid="places-panel" inert={locked}>
       <header className="places__header">
         <h2 id="places-heading" className="places__title">
           Places

@@ -10,6 +10,7 @@ import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
 import type { Place } from '../../types/trip'
 import { LegConnector } from '../legs/LegConnector'
+import { useRideStore } from '../ride/rideStore'
 import { DayField } from './DayField'
 import { PlaceSearch } from './PlaceSearch'
 import { displayName } from './names'
@@ -82,6 +83,8 @@ export function PlaceRow({ place, index, isLast, earlierThan }: PlaceRowProps) {
   const renaming = useUiStore((s) => s.renamingPlaceId === place.id)
   const selected = useUiStore((s) => s.selectedPlaceId === place.id)
   const hovered = useUiStore((s) => s.hoveredPlaceId === place.id)
+  // While riding: the place the van is at, and the ones it has been to.
+  const ride = useRideStore((s) => (!s.active ? undefined : s.placeIndex === index ? 'current' : s.placeIndex > index ? 'reached' : undefined))
   const name = displayName(place.name)
   const addressTip = useTooltip<HTMLButtonElement>(place.address)
   const menuLabel = `Actions for ${name}`
@@ -148,6 +151,7 @@ export function PlaceRow({ place, index, isLast, earlierThan }: PlaceRowProps) {
         data-selected={selected || undefined}
         data-hovered={hovered || undefined}
         data-expanded={expanded || undefined}
+        data-ride={ride}
         // Mouse only: after a touch tap there is no pointer to leave again, so it would stay stuck.
         onPointerEnter={(e) => {
           if (e.pointerType === 'mouse') useUiStore.getState().hoverPlace(place.id)
