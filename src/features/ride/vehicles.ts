@@ -1,11 +1,12 @@
 import type { LegMode, TripVehicle, VehicleKind } from '../../types/trip'
 import { createLru } from '../../lib/lru'
-import { lighten, luminance, mixColors, parseColor, resolveVehicle } from '../../lib/vehicles'
+import { isDarkBody, lighten, luminance, mixColors, parseColor, resolveVehicle } from '../../lib/vehicles'
 import type { Facing } from './camera'
 
 /**
- * The little vehicles of the ride, drawn by hand as shapes in a 64 × 40 box: side views facing east, with a
- * dark outline and light or saturated bodies so they read on any tile. One description serves both the page
+ * The little vehicles of the ride, drawn by hand as shapes in a box 40 units high and, as a rule, 64 wide: side
+ * views facing east, with a dark outline and light or saturated bodies so they read on any tile. A vehicle that
+ * is longer than the rest (the Campervan) has a wider box, drawn at the same scale per unit. One description serves both the page
  * (`vehicleSvg`: an SVG string for the ride's Leaflet icon and the picker) and a canvas (`drawVehicle`: the
  * same shapes painted with `Path2D`, for the picture and video export), so the two cannot drift apart. This
  * file knows nothing of React or Leaflet.
@@ -18,12 +19,18 @@ import type { Facing } from './camera'
 
 export type { Facing }
 
-/** The box every vehicle is drawn in (SVG user units). */
+/**
+ * The standard box vehicles are drawn in (SVG user units). Every picture is 40 high; a longer one is wider
+ * (`pictureBox`), at the same scale. Sizes in px always mean "this much for the standard 64-unit width".
+ */
 export const VEHICLE_BOX = { width: 64, height: 40 } as const
-/** Where the vehicle touches its line (box units): the middle of the wheels, a little below the middle of the box. */
+/** Where the vehicle touches its line (box units): the middle of the wheels, a little below the middle of the box (`x` is that of the standard box; a wider box has its own middle). */
 export const VEHICLE_ANCHOR = { x: 32, y: 30.8 } as const
-/** The width the ride draws a vehicle at (px). */
+/** The width the ride draws the standard box at (px): every unit is 56 / 64 px, whatever the picture's own width. */
 export const VEHICLE_DRAW_WIDTH = 56
+
+/** Vehicles whose picture is wider than the standard box: the long-wheelbase Campervan, ≈ 2.5 times as long as it is high. */
+const WIDE_BOX: Partial<Record<VehicleKind, number>> = { 'iveco-daily': 78 }
 
 // ---- The shape model ----------------------------------------------------------------------------
 
@@ -128,42 +135,73 @@ function campervan(color: string): Shape[] {
   ]
 }
 
+/** Move absolute path data (M, L, H, Q with upper-case commands) right by `dx`; relative commands and arcs are left alone. */
+function shiftX(d: string, dx: number): string {
+  return d.replace(/([MLHQ])([^A-Za-z]*)/g, (_m, cmd: string, args: string) => {
+    const nums = args.trim().split(/[\s,]+/).filter(Boolean).map(Number)
+    const moved = nums.map((v, i) => (cmd === 'H' || i % 2 === 0 ? n(v + dx) : v))
+    return cmd + moved.join(' ')
+  })
+}
+
+const shifted = (shape: PathShape, dx: number): PathShape => ({ ...shape, d: shiftX(shape.d, dx) })
+
+/** The Campervan's cab and nose are the former van's, moved this far forward; the longer cargo box fills the gap behind them. */
+const VAN_STRETCH = 14
+
 /**
- * A long-wheelbase, high-roof panel van in black: the short steep bonnet and big upright windscreen, the
- * sliding side door, dark tinted glass and grey wheels. The body is near black, so its shape is carried by
- * a pale roof edge, door lines, a crease and the wheel arches; no badges.
+ * The Campervan (kind `iveco-daily`): a long (L4-style) high-roof van, black unless coloured: long wheelbase
+ * AND a long tail, so the picture is wider than the standard box (78 units, ≈ 2.5 times as long as the body is
+ * high). The cab keeps its look (short steep bonnet, big upright windscreen, A-pillar mirror, dark tinted
+ * glass), the sliding door sits behind it and the body runs on past the rear axle by about a third of the
+ * wheelbase, carrying two tinted side windows and a roof vent. Only the body is `color`; glass, tyres and rims,
+ * lamps, trim and the vent keep their own colours. Highlights and creases switch between light and dark with
+ * the body, so a near-black body keeps its shape (pale roof edge, door lines, a crease, the arches) and a white
+ * one does too; no badges.
  */
-function ivecoDaily(color: string): Shape[] {
+function longVan(color: string): Shape[] {
   const edge = '#05070a'
   const trim = '#39414d'
-  const body = 'M3 31V12Q3 8 7 8H44.6Q46.6 8 47.7 9.8L53.2 21Q54 22.6 55.7 23.1L59.6 24.3Q61.7 24.9 61.7 27V31Z'
+  const tint = '#1b2638'
+  const dx = VAN_STRETCH
+  const [rear, front] = [22, 50.2 + dx]
+  const body = `M3 31V12Q3 8 7 8H${n(44.6 + dx)}Q${n(46.6 + dx)} 8 ${n(47.7 + dx)} 9.8L${n(53.2 + dx)} 21Q${n(54 + dx)} 22.6 ${n(55.7 + dx)} 23.1L${n(59.6 + dx)} 24.3Q${n(61.7 + dx)} 24.9 ${n(61.7 + dx)} 27V31Z`
+  const dark = luminance(color) < 0.5
+  const [crease, creaseOp] = dark ? ['#ffffff', 1] : ['#0f172a', 0.55]
   const arch = (cx: number) => path(`M${n(cx - 8.2)} 31.2V30.5A8.2 8.2 0 0 1 ${n(cx + 8.2)} 30.5V31.2Z`, { fill: edge })
   const archRim = (cx: number) => line(`M${n(cx - 8.2)} 30.5A8.2 8.2 0 0 1 ${n(cx + 8.2)} 30.5`, '#6b7686', 0.9, 0.85)
+  const glint = (x: number) => path(`M${x} 12.6H${n(x + 3.1)}L${n(x + 1)} 18.4H${n(x - 1.2)}V17.2Z`, { fill: '#ffffff', op: 0.13 })
   return [
+    // The roof vent, behind the body so the roof line overlaps its foot.
+    rect(15, 5.8, 11.6, 3, 1.1, { fill: '#c3cad4', stroke: edge, sw: 1 }),
     path(body, { fill: color, stroke: edge, sw: 2 }, true),
-    // The lighter plastic skirt along the bottom and the pale edge of the roof.
-    path('M3.6 28.4H61.1V30.8H3.6Z', { fill: '#262b33' }),
-    line('M6.6 9.5H44.4Q46 9.5 47 10.8', '#ffffff', 1, 0.42),
-    line('M4.2 21.4H53.4', '#ffffff', 0.8, 0.16),
-    // Cab: dark tinted glass, its glint, the door's rear edge. The windscreen is the slanted front edge.
-    path('M38.9 11.4H46.7Q47.2 11.4 47.5 11.9L51.7 20.6H38.9Z', { fill: '#1b2638', stroke: edge, sw: 1 }),
-    path('M41 11.8H43.9L40.6 20.2H38.9V19.6Z', { fill: '#ffffff', op: 0.17 }),
+    // The plastic skirt along the bottom and the edge of the roof.
+    path(`M3.6 28.4H${n(61.1 + dx)}V30.8H3.6Z`, { fill: '#262b33' }),
+    line(`M6.6 9.5H${n(44.4 + dx)}Q${n(46 + dx)} 9.5 ${n(47 + dx)} 10.8`, crease, 1, 0.42 * creaseOp),
+    line(`M4.2 21.4H${n(53.4 + dx)}`, crease, 0.8, 0.16 * creaseOp),
+    // Two tinted side windows behind the door, then the cab: dark tinted glass. The windscreen is the slanted front edge.
+    rect(9.4, 12.2, 13.4, 6.6, 1.4, { fill: tint, stroke: edge, sw: 1 }),
+    glint(11.6),
+    rect(26.6, 12.2, 11.4, 6.6, 1.4, { fill: tint, stroke: edge, sw: 1 }),
+    glint(28.6),
+    shifted(path('M38.9 11.4H46.7Q47.2 11.4 47.5 11.9L51.7 20.6H38.9Z', { fill: tint, stroke: edge, sw: 1 }), dx),
+    shifted(path('M41 11.8H43.9L40.6 20.2H38.9V19.6Z', { fill: '#ffffff', op: 0.17 }), dx),
     // The sliding door, whose front edge is the cab door's rear edge.
-    path('M25.4 29.4V12.4Q25.4 10.9 26.9 10.9H38.2V29.4', { stroke: '#5b6573', sw: 0.8, op: 0.9 }),
-    rect(34, 19.6, 2.8, 1.2, 0.6, { fill: '#8b95a3' }),
+    path(`M${n(38.2 + dx - 11.4)} 29.4V12.4Q${n(38.2 + dx - 11.4)} 10.9 ${n(38.2 + dx - 9.9)} 10.9H${n(38.2 + dx)}V29.4`, { stroke: dark ? '#5b6573' : '#334155', sw: 0.8, op: 0.9 }),
+    rect(34 + dx, 19.6, 2.8, 1.2, 0.6, { fill: '#8b95a3' }),
     // The big mirror at the A-pillar.
-    path('M52.9 15.4H55.4Q56.4 15.4 56.4 16.4V19.5Q56.4 20.5 55.4 20.5H53.5Z', { fill: '#0d0f13', stroke: '#6b7686', sw: 0.8 }),
+    shifted(path('M52.9 15.4H55.4Q56.4 15.4 56.4 16.4V19.5Q56.4 20.5 55.4 20.5H53.5Z', { fill: '#0d0f13', stroke: '#6b7686', sw: 0.8 }), dx),
     // Lamps and bumpers.
-    rect(58.8, 25.4, 3.3, 2.4, 1, { fill: '#f3f4f6', stroke: edge, sw: 1 }),
-    rect(55.2, 29, 7.5, 2.8, 1.2, { fill: trim, stroke: edge, sw: 1 }),
+    rect(58.8 + dx, 25.4, 3.3, 2.4, 1, { fill: '#f3f4f6', stroke: edge, sw: 1 }),
+    rect(55.2 + dx, 29, 7.5, 2.8, 1.2, { fill: trim, stroke: edge, sw: 1 }),
     rect(3.1, 12.4, 2.1, 8.4, 0.9, { fill: '#dc2626', stroke: edge, sw: 0.8 }),
     rect(1.6, 29, 6, 2.8, 1.2, { fill: trim, stroke: edge, sw: 1 }),
-    arch(14.2),
-    archRim(14.2),
-    arch(50.2),
-    archRim(50.2),
-    wheel(14.2, 30.5, 6.3, { tyre: '#0b0d10', rim: '#aab2be', spoke: '#5b6573', spokes: 3 }),
-    wheel(50.2, 30.5, 6.3, { tyre: '#0b0d10', rim: '#aab2be', spoke: '#5b6573', spokes: 3 }),
+    arch(rear),
+    archRim(rear),
+    arch(front),
+    archRim(front),
+    wheel(rear, 30.5, 6.3, { tyre: '#0b0d10', rim: '#aab2be', spoke: '#5b6573', spokes: 3 }),
+    wheel(front, 30.5, 6.3, { tyre: '#0b0d10', rim: '#aab2be', spoke: '#5b6573', spokes: 3 }),
   ]
 }
 
@@ -315,38 +353,56 @@ const PLANE: Shape[] = [
   rect(32, 26, 9, 3.4, 1.7, { fill: '#e2e8f0', stroke: INK, sw: 1.4 }),
 ]
 
+/** What is drawn: the shapes and the width of the box they are drawn in (units). */
+interface Art {
+  shapes: readonly Shape[]
+  width: number
+}
+
+const standard = (shapes: readonly Shape[]): Art => ({ shapes, width: VEHICLE_BOX.width })
+
 const ROAD: Record<VehicleKind, (color: string) => Shape[]> = {
   campervan,
-  'iveco-daily': ivecoDaily,
+  'iveco-daily': longVan,
   'retro-bus': retroBus,
   motorhome,
   caravan: carWithCaravan,
   offroad,
 }
 
-const OTHER: Record<Exclude<LegMode, 'drive'>, Shape[]> = { ferry: FERRY, train: TRAIN, flight: PLANE }
+const OTHER: Record<Exclude<LegMode, 'drive'>, Art> = { ferry: standard(FERRY), train: standard(TRAIN), flight: standard(PLANE) }
 
 /** Most vehicle looks kept at once: a colour being dragged in the picker makes a new one per step, and only the latest matter. */
 const SHAPE_CACHE_LIMIT = 24
-const cache = createLru<string, Shape[]>(SHAPE_CACHE_LIMIT)
+const cache = createLru<string, Art>(SHAPE_CACHE_LIMIT)
 
 /** How many looks are cached (for tests). */
 export const shapeCacheSize = (): number => cache.size
 
-/** The shapes of the trip's vehicle (`vehicle` as the trip stores it; anything unusable is the campervan). */
-function roadShapes(vehicle: TripVehicle | undefined): Shape[] {
+/** The picture of the trip's vehicle (`vehicle` as the trip stores it; anything unusable is the default vehicle). */
+function roadArt(vehicle: TripVehicle | undefined): Art {
   const { kind, color } = resolveVehicle(vehicle)
   const key = `${kind}|${color}`
-  let shapes = cache.get(key)
-  if (!shapes) {
-    shapes = ROAD[kind](color)
-    cache.set(key, shapes)
+  let art = cache.get(key)
+  if (!art) {
+    art = { shapes: ROAD[kind](color), width: WIDE_BOX[kind] ?? VEHICLE_BOX.width }
+    cache.set(key, art)
   }
-  return shapes
+  return art
 }
 
-function shapesFor(mode: LegMode, vehicle: TripVehicle | undefined): Shape[] {
-  return mode === 'drive' ? roadShapes(vehicle) : OTHER[mode]
+function artFor(mode: LegMode, vehicle: TripVehicle | undefined): Art {
+  return mode === 'drive' ? roadArt(vehicle) : OTHER[mode]
+}
+
+/**
+ * The box (units) the picture of a stretch of `mode` is drawn in: always as high as the standard box, as wide
+ * as the standard box or, for a long vehicle, wider. The anchor is the middle of it (`x = width / 2`) at
+ * `VEHICLE_ANCHOR.y`; one unit is `width / 64` px when a picture is drawn at `width` px (a picture of 78 units
+ * at 56 is 68 px wide).
+ */
+export function pictureBox(mode: LegMode, vehicle?: TripVehicle): { width: number; height: number } {
+  return { width: artFor(mode, vehicle).width, height: VEHICLE_BOX.height }
 }
 
 // ---- As SVG ----------------------------------------------------------------------------------------
@@ -363,20 +419,23 @@ function shapeSvg(s: Shape): string {
   return `<g class="ride-wheel" style="transform-origin:${s.spin[0]}px ${s.spin[1]}px">${s.parts.map(pathSvg).join('')}</g>`
 }
 
-function svgOf(shapes: readonly Shape[], facing: Facing): string {
+function svgOf({ shapes, width }: Art, facing: Facing): string {
   const inner = shapes.map(shapeSvg).join('')
-  const art = facing === 'west' ? `<g transform="translate(${VEHICLE_BOX.width} 0) scale(-1 1)">${inner}</g>` : inner
-  return `<svg class="ride-art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VEHICLE_BOX.width} ${VEHICLE_BOX.height}" width="${VEHICLE_DRAW_WIDTH}" height="${(VEHICLE_DRAW_WIDTH * VEHICLE_BOX.height) / VEHICLE_BOX.width}" aria-hidden="true">${art}</svg>`
+  const art = facing === 'west' ? `<g transform="translate(${width} 0) scale(-1 1)">${inner}</g>` : inner
+  const unit = VEHICLE_DRAW_WIDTH / VEHICLE_BOX.width
+  // A picture wider than the standard box says so (`--units`), so the CSS can centre it on its anchor and size it in the picker.
+  const wide = width === VEHICLE_BOX.width ? '' : ` style="--units:${width}"`
+  return `<svg class="ride-art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${VEHICLE_BOX.height}" width="${n(width * unit)}" height="${VEHICLE_BOX.height * unit}"${wide} aria-hidden="true">${art}</svg>`
 }
 
-/** The trip's vehicle as an SVG string (56 × 35 px by default), facing east or, mirrored, west. */
+/** The trip's vehicle as an SVG string (56 × 35 px by default, wider for a long vehicle), facing east or, mirrored, west. */
 export function vehicleSvg(vehicle?: TripVehicle, facing: Facing = 'east'): string {
-  return svgOf(roadShapes(vehicle), facing)
+  return svgOf(roadArt(vehicle), facing)
 }
 
 /** What carries the traveller on a stretch of `mode`: the trip's vehicle on the road, a ferry, train or plane otherwise. */
 export function transportSvg(mode: LegMode, vehicle?: TripVehicle, facing: Facing = 'east'): string {
-  return svgOf(shapesFor(mode, vehicle), facing)
+  return svgOf(artFor(mode, vehicle), facing)
 }
 
 // ---- On a canvas -------------------------------------------------------------------------------------
@@ -387,7 +446,11 @@ export type VehicleContext = CanvasRenderingContext2D | OffscreenCanvasRendering
 export interface DrawOptions {
   /** How far the wheels have turned (radians). */
   wheelAngle?: number
-  /** A soft white glow round the outline, like the ride's on the map: lifts the vehicle off busy or dark ground. */
+  /**
+   * A soft white glow round the outline, like the ride's on the map: lifts the vehicle off busy or dark
+   * ground. Left out, it is automatic: on for a road vehicle with a dark body (a black campervan vanishes on
+   * dark tiles without it), off otherwise. `true` and `false` force it.
+   */
   halo?: boolean
 }
 
@@ -416,14 +479,14 @@ function paintShape(ctx: VehicleContext, s: PathShape, alpha: number): void {
   }
 }
 
-function drawShapes(ctx: VehicleContext, shapes: readonly Shape[], x: number, y: number, facing: Facing, width: number, { wheelAngle = 0, halo = false }: DrawOptions): void {
+function drawShapes(ctx: VehicleContext, { shapes, width: box }: Art, x: number, y: number, facing: Facing, width: number, wheelAngle: number, halo: boolean): void {
   const scale = width / VEHICLE_BOX.width
   const alpha = ctx.globalAlpha
   ctx.save()
   try {
     ctx.translate(x, y)
     ctx.scale(facing === 'west' ? -scale : scale, scale)
-    ctx.translate(-VEHICLE_ANCHOR.x, -VEHICLE_ANCHOR.y)
+    ctx.translate(-box / 2, -VEHICLE_ANCHOR.y)
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
     if (halo) {
@@ -452,9 +515,11 @@ function drawShapes(ctx: VehicleContext, shapes: readonly Shape[], x: number, y:
 
 /**
  * Paint the trip's vehicle on a canvas, as `vehicleSvg` draws it. `(x, y)` is where it touches its line
- * (the middle of its wheels, in the canvas's current coordinates); `width` is how wide the whole 64 × 40
- * picture is drawn (the ride uses 56). The context's `globalAlpha` fades the whole vehicle (the shapes with their own
- * opacity multiply it). Its transform, alpha, shadow and line styles are left as they were. Needs `Path2D` (every browser, and workers).
+ * (the middle of its wheels and of its picture, in the canvas's current coordinates); `width` is how wide the
+ * standard 64 × 40 box is drawn (the ride uses 56), so every vehicle has the same scale and a long one comes out
+ * wider than `width` (`pictureBox` says by how much). The context's `globalAlpha` fades the whole vehicle (the shapes with their own
+ * opacity multiply it). A dark body gets the halo by itself (see `DrawOptions.halo`). Its transform, alpha, shadow and
+ * line styles are left as they were. Needs `Path2D` (every browser, and workers).
  */
 export function drawVehicle(
   ctx: VehicleContext,
@@ -465,7 +530,7 @@ export function drawVehicle(
   width = VEHICLE_DRAW_WIDTH,
   options: DrawOptions = {},
 ): void {
-  drawShapes(ctx, roadShapes(vehicle), x, y, facing, width, options)
+  drawShapes(ctx, roadArt(vehicle), x, y, facing, width, options.wheelAngle ?? 0, options.halo ?? isDarkBody(resolveVehicle(vehicle).color))
 }
 
 /** Like `drawVehicle`, for a stretch of `mode`: the trip's vehicle on the road, a ferry, train or plane otherwise. */
@@ -479,5 +544,6 @@ export function drawTransport(
   width = VEHICLE_DRAW_WIDTH,
   options: DrawOptions = {},
 ): void {
-  drawShapes(ctx, shapesFor(mode, vehicle), x, y, facing, width, options)
+  const halo = options.halo ?? (mode === 'drive' && isDarkBody(resolveVehicle(vehicle).color))
+  drawShapes(ctx, artFor(mode, vehicle), x, y, facing, width, options.wheelAngle ?? 0, halo)
 }

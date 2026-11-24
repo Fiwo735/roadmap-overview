@@ -2,7 +2,7 @@ import type { TripVehicle, VehicleKind } from '../types/trip'
 
 /**
  * The vehicles the ride drives on road stretches: what exists, what each is called, its own colour and
- * how a colour is handled. Pure data and helpers; the artwork is in `features/ride/vehicles.ts`.
+ * how a colour is handled. Every vehicle can be coloured. Pure data and helpers; the artwork is in `features/ride/vehicles.ts`.
  */
 export interface VehicleMeta {
   kind: VehicleKind
@@ -10,19 +10,24 @@ export interface VehicleMeta {
   label: string
   /** The body colour when none is chosen (`#rrggbb`). */
   defaultColor: string
-  /** Whether the body colour can be chosen. The Daily is the black van: its name says so. */
-  colorable: boolean
 }
 
 export const DEFAULT_VEHICLE_KIND: VehicleKind = 'campervan'
 
+/**
+ * The stored kind ids outlive their names: trips, share links, autosaves and the remembered choice keep
+ * them, so renaming an id would silently swap the vehicle in every existing trip. Two labels therefore
+ * differ from their ids: kind `campervan` (the original small van, the default) is shown as "Car", and
+ * kind `iveco-daily` (the long, black-by-default van) is shown as "Campervan". Only labels change; never
+ * swap or rename ids.
+ */
 export const VEHICLES: Record<VehicleKind, VehicleMeta> = {
-  campervan: { kind: 'campervan', label: 'Campervan', defaultColor: '#ffffff', colorable: true },
-  'iveco-daily': { kind: 'iveco-daily', label: 'Iveco Daily (black)', defaultColor: '#15181d', colorable: false },
-  'retro-bus': { kind: 'retro-bus', label: 'Retro camper bus', defaultColor: '#2a9d9d', colorable: true },
-  motorhome: { kind: 'motorhome', label: 'Motorhome', defaultColor: '#ffffff', colorable: true },
-  caravan: { kind: 'caravan', label: 'Car with caravan', defaultColor: '#2f6fd1', colorable: true },
-  offroad: { kind: 'offroad', label: '4×4 with roof tent', defaultColor: '#3f9560', colorable: true },
+  campervan: { kind: 'campervan', label: 'Car', defaultColor: '#ffffff' },
+  'iveco-daily': { kind: 'iveco-daily', label: 'Campervan', defaultColor: '#15181d' },
+  'retro-bus': { kind: 'retro-bus', label: 'Retro camper bus', defaultColor: '#2a9d9d' },
+  motorhome: { kind: 'motorhome', label: 'Motorhome', defaultColor: '#ffffff' },
+  caravan: { kind: 'caravan', label: 'Car with caravan', defaultColor: '#2f6fd1' },
+  offroad: { kind: 'offroad', label: '4×4 with roof tent', defaultColor: '#3f9560' },
 }
 
 /** The order the picker lists them in. */
@@ -84,6 +89,12 @@ export function luminance(color: string): number {
   return c ? (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 : 0
 }
 
+/** Below this brightness a body is too close to the dark outline to be seen on dark ground without a glow. */
+const DARK_BODY = 0.3
+
+/** Is `color` dark enough that a vehicle painted in it needs a light halo to stand out (black, dark navy, …)? */
+export const isDarkBody = (color: string): boolean => luminance(color) < DARK_BODY
+
 // ---- The trip's vehicle -------------------------------------------------------------------------
 
 export interface ResolvedVehicle {
@@ -93,26 +104,24 @@ export interface ResolvedVehicle {
 }
 
 /**
- * What to draw for a trip's `vehicle`, whatever state it is in: a missing vehicle is the campervan, an
- * unknown kind is too, and a colour that is missing, invalid or not applicable falls back to the
- * vehicle's own.
+ * What to draw for a trip's `vehicle`, whatever state it is in: a missing vehicle is the default vehicle
+ * (kind `campervan`, labelled Car), an unknown kind is too, and a colour that is missing or invalid falls
+ * back to the vehicle's own.
  */
 export function resolveVehicle(vehicle?: { kind?: unknown; color?: unknown } | null): ResolvedVehicle {
   const kind = isVehicleKind(vehicle?.kind) ? vehicle.kind : DEFAULT_VEHICLE_KIND
   const meta = VEHICLES[kind]
-  const color = meta.colorable ? normalizeColor(vehicle?.color) : null
-  return { kind, color: color ?? meta.defaultColor }
+  return { kind, color: normalizeColor(vehicle?.color) ?? meta.defaultColor }
 }
 
 /**
- * The trip's way of saying "this vehicle in this colour": nothing at all for the default campervan, no
- * colour for the vehicle's own colour or for kinds that have only one, and `#rrggbb` otherwise. Keeps
- * files, share links and the undo history free of spellings that mean the same thing.
+ * The trip's way of saying "this vehicle in this colour": nothing at all for the default vehicle in its own
+ * colour, no colour for a vehicle's own colour, and `#rrggbb` otherwise. Keeps files, share links and the
+ * undo history free of spellings that mean the same thing.
  */
 export function canonicalVehicle(kind: VehicleKind, color?: string | null): TripVehicle | undefined {
-  const meta = VEHICLES[kind]
-  const chosen = meta.colorable ? normalizeColor(color) : null
-  const own = chosen && chosen !== meta.defaultColor ? chosen : undefined
+  const chosen = normalizeColor(color)
+  const own = chosen && chosen !== VEHICLES[kind].defaultColor ? chosen : undefined
   if (kind === DEFAULT_VEHICLE_KIND && !own) return undefined
   return own ? { kind, color: own } : { kind }
 }
@@ -129,18 +138,19 @@ export function sameVehicle(a?: TripVehicle | null, b?: TripVehicle | null): boo
 
 /**
  * Read the `vehicle` of an untrusted trip. Nothing, or something that cannot be a vehicle, gives the
- * default; an unknown kind gives the default campervan, a bad colour the vehicle's own. What was
+ * default; an unknown kind gives the default vehicle, a bad colour the vehicle's own. What was
  * repaired is added to `warnings`.
  */
 export function parseVehicle(raw: unknown, warnings: string[]): TripVehicle | undefined {
   if (raw === undefined || raw === null) return undefined
   if (typeof raw !== 'object' || Array.isArray(raw)) {
-    warnings.push('The vehicle was not valid; the campervan is used.')
+    // The default vehicle (kind `campervan`) is called Car in the picker.
+    warnings.push('The vehicle was not valid; the car is used.')
     return undefined
   }
   const { kind, color } = raw as { kind?: unknown; color?: unknown }
   if (!isVehicleKind(kind)) {
-    warnings.push(`The vehicle ${typeof kind === 'string' && kind ? `“${kind.slice(0, 40)}” ` : ''}is not known; the campervan is used.`)
+    warnings.push(`The vehicle ${typeof kind === 'string' && kind ? `“${kind.slice(0, 40)}” ` : ''}is not known; the car is used.`)
     return undefined
   }
   if (color !== undefined && normalizeColor(color) === null) {

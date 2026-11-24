@@ -148,8 +148,9 @@ See `src/types/trip.ts`. Key rules:
 - **Modes.** `src/lib/modes.ts` defines colours, dashes and speed estimates per mode. Map,
   sidebar and image export all read from it.
 - **Vehicle** (F14). `Trip.vehicle?: { kind: VehicleKind; color?: string }` is the vehicle the ride drives on road stretches;
-  missing means the default campervan. It is intent (undoable, autosaved, exported, in share links) and kept **canonical**: the
-  default campervan, a vehicle's own colour and a colour on a kind that has only one are stored as nothing (`canonicalVehicle`).
+  missing means the default vehicle, kind `campervan`, which the picker calls **Car** (F16: the stored kind ids never change, only
+  the labels do). It is intent (undoable, autosaved, exported, in share links) and kept **canonical**: the default vehicle in its own
+  colour, and any vehicle's own colour, are stored as nothing (`canonicalVehicle`).
 
 ## State
 
@@ -815,7 +816,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   look at ride internals. Any trip change that still gets through is handled by the rebuild/close rule above.
 - **Map** (`rideScene.ts`, mounted by `RideLayer` only while a ride is on; `destroy()` restores the view, the
   panes and the container class): the vehicle is a Leaflet marker in the `ride` pane with an SVG per
-  vehicle (`vehicles.ts`: the trip's own vehicle on the road — F14 — and the ferry, train and plane; all side views facing east, ~56 × 35 px). It
+  vehicle (`vehicles.ts`: the trip's own vehicle on the road — F14 — and the ferry, train and plane; all side views facing east, ~56 × 35 px, the long Campervan 68 px wide since F16 and centred on the same 56 px marker). It
   **mirrors** to face west — `nextFacing()` turns only once the heading is ≥ 15° past north/south, so
   wiggly roads do not flip it — and is never rotated. Wheels spin and the body bobs while it moves;
   parked (rest day, the end) it stands beside its stop's badge. A small "Day N" tag rides above it.
@@ -1318,35 +1319,35 @@ rules (the tile usage policy requires visible attribution as well).
   window; the choice persists across reload; a damaged stored value falls back to the caption.
 - **Known gaps**: the caption is not translated or customisable; the in-image credit is only ever in a corner.
 
-### F14 — choose the vehicle (including a black Iveco Daily)
+### F14 — choose the vehicle (including a black Iveco Daily; renamed and made colourable in F16)
 
 - **Contract** (additive, optional, no version bump): `Trip.vehicle?: TripVehicle` = `{ kind: VehicleKind; color?: string }`,
   `VehicleKind = 'campervan' | 'iveco-daily' | 'retro-bus' | 'motorhome' | 'caravan' | 'offroad'` (types/trip.ts). Missing = the
   campervan of F6, so every older file and link is unchanged. `src/lib/vehicles.ts` (pure, tested) is the registry — `VEHICLES`
-  (label, default colour, `colorable`), `VEHICLE_KINDS` (picker order), `COLOR_PRESETS`, colour maths (`parseColor`,
+  (label, default colour; F14 also had a `colorable` flag, which F16 removed), `VEHICLE_KINDS` (picker order), `COLOR_PRESETS`, colour maths (`parseColor`,
   `normalizeColor` → lower-case `#rrggbb`, `mixColors`, `lighten`, `darken`, `luminance`), `resolveVehicle` (whatever state a
   vehicle is in → `{ kind, color }`), `canonicalVehicle`, `sameVehicle` and `parseVehicle`. `parseTripFile` runs `parseVehicle`: an unknown
   kind → the campervan, a bad colour → the vehicle's own colour, a non-object → none, each with a warning (so the open toast says it); the
-  stored form is canonical, so equal vehicles have equal fingerprints. The Iveco Daily is **not colourable** (its name says black): a colour
-  on it is dropped. `tripStore.setVehicle(kind, color?)` is one `edit` (one undo step; a choice that changes nothing records nothing;
+  stored form is canonical, so equal vehicles have equal fingerprints. Every vehicle is colourable (in F14 the Iveco Daily was not; F16 changed
+  that, and its black is now just its own colour). `tripStore.setVehicle(kind, color?)` is one `edit` (one undo step; a choice that changes nothing records nothing;
   an unknown kind or a bad colour is ignored). **The last choice is remembered** (`store/vehiclePreference.ts`, `localStorage["roadmap-overview:vehicle"]`, the canonical vehicle as JSON,
   absent for the default campervan): only a choice made in the picker writes it (not undo, not opening a trip). It is the vehicle of a **new** trip:
   `newTrip()` (File → New trip), the empty trip of a first visit or a corrupt autosave (`bootstrap`, with history paused: no undo step) and the sample
   trip when it has none of its own (`openTripText(…, { withPreferredVehicle })`). A restored autosave, an opened file or a link keeps its own vehicle.
   Starting a new trip is one undo step that brings the old trip, and its vehicle, back.
-- **Artwork** (`features/ride/vehicles.ts`, framework-free: no React, no Leaflet). Every picture is a list of shapes in a 64 × 40 box
-  (`VEHICLE_BOX`, anchor `VEHICLE_ANCHOR` = the middle of the wheels, ground at y ≈ 36.7): SVG path data with fill / stroke / opacity, plus
+- **Artwork** (`features/ride/vehicles.ts`, framework-free: no React, no Leaflet). Every picture is a list of shapes in a 64 × 40 box (F16: 40 high, and as wide as it needs — the Campervan's is 78 — `pictureBox`)
+  (`VEHICLE_BOX`, anchor `VEHICLE_ANCHOR` = the middle of the wheels, ground at y ≈ 36.7; the anchor's x is the middle of the picture's own box): SVG path data with fill / stroke / opacity, plus
   *wheels* (a group that turns about its centre). One description feeds two renderers, so SVG and canvas cannot drift:
   `vehicleSvg(vehicle, facing = 'east')` and `transportSvg(mode, vehicle, facing)` return an SVG string (56 × 35 px; `facing: 'west'` wraps it
   in `scale(-1 1)`; wheels carry `class="ride-wheel"` for the CSS spin), and **`drawVehicle(ctx, vehicle, x, y, facing, width = 56, { wheelAngle,
   halo })`** / `drawTransport(ctx, mode, vehicle, …)` paint the same shapes on a `CanvasRenderingContext2D` or `OffscreenCanvasRenderingContext2D`
-  with `Path2D` (`(x, y)` is where the wheels touch the line, `width` the width of the whole 64-unit box; the context's transform and styles are
-  restored; `halo` draws the soft white glow the map version has, which a black van needs on dark ground; shapes and `Path2D`s are cached, so a
+  with `Path2D` (`(x, y)` is where the wheels touch the line, `width` the width of the standard 64-unit box, so one unit is `width / 64` whatever the picture; the context's transform and styles are
+  restored; `halo` draws the soft white glow the map version has, which a black van needs on dark ground (omitted, it is automatic for dark bodies since F16); shapes and `Path2D`s are cached, so a
   frame costs one fill/stroke per shape; the cache is a 24-entry LRU, so the colours tried in a picker drag do not pile up). A shape's own opacity
   multiplies the context's `globalAlpha` at the start of the call, so a caller can fade the whole vehicle; the alpha is given back. `transportSvg` / `drawTransport` choose by the stretch's mode: the trip's vehicle on `drive`,
   the ferry, train or plane (now in the same shape model) otherwise. Body colours go through `toneOf` (roof/panel tone) and `accentFor`
   (stripe: orange/blue/white that does not vanish on the body). The campervan with no colour chosen draws exactly as in F6. The six vehicles:
-  campervan, **Iveco Daily (black)** — long-wheelbase high-roof panel van, short steep bonnet, large upright windscreen, sliding door,
+  campervan (shown as "Car" since F16); **Iveco Daily** (shown as "Campervan" and redrawn longer and colourable in F16, see there; the F14 look was) a long-wheelbase high-roof panel van, short steep bonnet, large upright windscreen, sliding door,
   dark glass, big mirror, grey wheels in dark arches, pale roof edge and crease lines so the black body keeps its shape — retro camper bus
   (two-tone, split windows, round lamp), coachbuilt motorhome (over-cab Luton), car with caravan, 4×4 with roof tent and spare wheel. No badges.
 - **Ride**: `rideScene.showLook(mode)` draws `transportSvg(mode, trip.vehicle)` and sets `data-vehicle` (the *mode*, as before: `drive`, `ferry`,
@@ -1356,24 +1357,23 @@ rules (the tile usage policy requires visible attribution as well).
 - **Picker** (`ride/VehiclePicker.tsx`, `vehicle.css`): `RideButton` now renders a `.ride-split` (Ride + the chevron `vehicle-button`, 26 px
   wide, joined; its name is "Choose vehicle (currently <label>)", and the Ride tooltip says "Ride the route day by day. Vehicle: <label>"). The chevron opens a popover portalled to `<body>` (below the button, right edges aligned, clamped into the window): a 2 × 3
   grid of cards (`role="radio"`, a picture on a patch of light map, the name) and, for colourable vehicles, nine preset swatches plus a custom
-  colour (native `<input type=color>`, committed on its `change` event so a drag is **one** undo step) or, for the Daily, a note that its
-  colour is fixed. Switching vehicle starts in the new vehicle's own colour; the checked card shows the colour in use (or being tried).
+  colour (native `<input type=color>`, committed on its `change` event so a drag is **one** undo step). Switching vehicle starts in the new vehicle's own colour; the checked card shows the colour in use (or being tried).
   Keys: arrows move the focus (they do not choose, as in `SegmentedControl`), Enter/Space choose, Escape closes and returns the focus,
   Tab out of the panel closes it; a click outside, scrolling or resizing closes it too. **Locked** while a ride runs or in presentation mode
   (`aria-disabled` + `aria-describedby` + tooltip: "Close the ride (Esc) to change the vehicle." / "Leave presentation mode (Esc) to change the
   vehicle."); a lock that begins while it is open closes it (store subscriptions, not an effect). Testids: `vehicle-button`
   (`data-vehicle-kind`), `vehicle-panel`, `vehicle-option` (`data-kind`, `aria-checked`), `vehicle-color` (`data-color`),
-  `vehicle-color-custom`, `vehicle-colors-note`.
+  `vehicle-color-custom` (F14 also had `vehicle-colors-note`, removed in F16).
 - **Docs**: Help ("Show it") and README (Ride section, the file format) mention the picker and the `vehicle` field.
 - **Tests**: Vitest — `lib/vehicles.test.ts` (registry, colours, resolve/canonical/parse), `tripFile.test.ts` (`vehicle`: round trip, unknown kind,
   bad colour, junk), `tripStore.test.ts` (`setVehicle`: undo, canonical form, no-ops, replace/new trip, a new trip with the remembered vehicle), `store/vehiclePreference.test.ts` (remember, forget, repair, blocked storage), `ride/vehicles.test.ts` (every kind
-  as a well-formed SVG, colours, the Daily's fixed colour, facing, the canvas API against a recording context with a stubbed `Path2D`: balanced
+  as a well-formed SVG, colours, facing, the canvas API against a recording context with a stubbed `Path2D`: balanced
   save/restore, mirroring, wheel angle, halo, caller's opacity multiplied in and restored, styles restored, `Path2D` reuse, bounded cache). Playwright (`e2e/vehicle.spec.ts`, mocked): the picker beside Ride,
-  choosing the Daily → trip + ride (`data-vehicle-kind`), every vehicle rides, one undo step / undo / redo, survives a reload, in the saved file,
+  choosing the Campervan (then the Daily) → trip + ride (`data-vehicle-kind`), every vehicle rides, one undo step / undo / redo, survives a reload, in the saved file,
   travels in a share link and opens from it, a damaged link repairs with a warning, New trip / first visit / sample with the remembered vehicle (and files, links, saved trips keeping theirs), colours (swatch, back to the own colour, per-vehicle
-  default, custom, the Daily), keyboard, Tab, outside click, both themes and a phone, the lock during a ride and in presentation mode (and a lock
+  default, custom), keyboard, Tab, outside click, both themes and a phone, the lock during a ride and in presentation mode (and a lock
   beginning while open), ferries keep the ferry, west facing, same size for all vehicles.
-- **Known gaps**: the vehicle pictures are drawn by hand and recognisable rather than exact (the Daily is a generic long, high-roof panel
+- **Known gaps**: the vehicle pictures are drawn by hand and recognisable rather than exact (the Campervan is a generic long, high-roof
   van with its proportions, not a licensed likeness); the picker's previews are not animated; a vehicle other than the campervan is not shown in
   the README screenshots; the remembered vehicle is per browser (not synced between devices), and re-clicking the checked vehicle also remembers it; the image export does not draw the vehicle (the video export, F13, does: it calls `drawTransport`).
 
@@ -1493,3 +1493,53 @@ The export dialog gained a **Video** tab; it renders the ride as an MP4 (or WebM
   the recorder fall-back needs the tab in front for the whole length and its WebM is not seekable in Chromium; a trip too small to zoom into, or whose follow map fits no cap, is shown whole; names are not avoided by the vehicle;
   a trip that crosses the date line is drawn as one continuous map (as the image) but not by the live ride;
   Firefox without an H.264 encoder makes a WebM; the credit's text is fixed (not translated).
+
+### F16 — vehicle picker: "Car" and "Campervan", a colourable long van
+
+- **Names, not ids.** `VEHICLES.campervan.label` is now **"Car"** (the original small van, still the default) and
+  `VEHICLES['iveco-daily'].label` is **"Campervan"**. The kind ids are stored in trips, share links, autosaves, recent trips and the
+  remembered-vehicle preference, so they are untouched (swapping them would have swapped the vehicle in every existing trip); a comment at
+  `VEHICLES` says why id and label differ. Everything that shows a name reads the registry (picker cards, the trigger's accessible name and
+  tooltip, the Ride tooltip), so no user-visible text says "Iveco Daily" any more; the repair warnings of `parseVehicle` say, in explicit
+  words, "…the car is used." (the default vehicle is the Car). Order, default and storage are unchanged. Help and README say Car / Campervan.
+- **Colour for the Campervan.** The `colorable` flag is gone: every vehicle takes the presets and a custom colour. The Campervan's own
+  colour is black (`#15181d`, the Black preset), so it is stored as nothing, like every vehicle's own colour (`canonicalVehicle`);
+  `parseTripFile` accepts a colour on `iveco-daily` (and keeps dropping an invalid one with a warning). Old trips with
+  `{ kind: 'iveco-daily' }` and no colour draw black, as before. The picker lost its "fixed colour" note (and `.vehicle-colors__note`,
+  `vehicle-colors-note`). Switching to the Campervan starts in black, as every vehicle starts in its own colour.
+- **Redrawn as a long (L4-style) van** (`longVan` in `features/ride/vehicles.ts`). An L4 high-roof van is long on both counts, so it no
+  longer fits the shared 64-unit box: **a picture may have its own width** (`WIDE_BOX`: the Campervan 78 units, everything else and the
+  ferry/train/plane 64; `pictureBox(mode, vehicle)` says which), always 40 units high and drawn at the **same scale per unit** (56 / 64 px).
+  So `width` of `drawVehicle` / `drawTransport` still means "the standard box's width" and the ride, the picker and F13's export call
+  them as before: the long van just comes out wider (68 px at the ride's 56). The anchor is the middle of the picture's own box at the
+  wheels' height (the body is centred in its box, so mirroring and the marker stay put). In the SVG the wide box is `viewBox 0 0 78 40`,
+  `width` 68.25, `style="--units:78"`; **CSS uses `--units`**: `.ride-art` gets a negative left margin so the 56 px marker's centre (its
+  anchor and the centre of the flip) is the van's middle, and the picker card sizes the svg at 1.75 px per unit (136 px, within the card).
+  The marker (`VAN_SIZE`, the Day tag, parking offset) is unchanged. Proportions: wheelbase 42 units (the old van's 36), the body runs about
+  0.3 of the wheelbase past the rear tyre (the old 0.14) and is ≈ 2.5 × as long as it is high. The cab is the old van's moved forward
+  (`shiftX`, `VAN_STRETCH`); the cargo box gained two tinted side windows and a pale roof vent so it reads as a camper conversion.
+  **Only the body takes the colour**; glass, tyres and rims, lamps, bumpers, the plastic skirt and the vent keep their own colours. The
+  highlight and crease lines follow the body's brightness (pale lines on dark bodies, dark ones on light), so black, white and every preset
+  keep their shape at 56 px, at 2×, facing either way, on light and dark tiles. The ride's marker now starts with the trip's own vehicle
+  kind and colour (`data-vehicle-kind` / `-color`) instead of a hard-coded `campervan`.
+- **Canvas halo is automatic for dark bodies.** `drawVehicle` / `drawTransport` keep their signatures; `DrawOptions.halo` now means: `true`
+  / `false` force it, **omitted = automatic**, i.e. the soft white halo when the road vehicle's body is dark (`isDarkBody` in
+  `lib/vehicles.ts`: perceived brightness below 0.3, which among the presets is only Black) and none otherwise, and none for the
+  ferry, train and plane. The map's ride already had the CSS halo; this is for image and video export on dark ground. A caller that
+  never passed `halo` and draws a dark vehicle now gets a glow behind it; others are unchanged.
+- **Tests.** Vitest: labels and ids, default black and its being a preset, every preset/any colour on the Campervan, canonical storage
+  (black = nothing, other colours `#rrggbb`, a black Car is kept), `resolveVehicle` / `sameVehicle` / `vehicleLabel`, `parseVehicle` and
+  `parseTripFile` with a colour on `iveco-daily`, the warnings naming "the car", `tripStore.setVehicle` (colour = one undo step, own
+  black = no change), `isDarkBody`, the artwork (body-only colour by swapping the colour text, glass/wheels/lamps constant, wheelbase ≥ 40,
+  tail ≥ 0.25 of the wheelbase and longer than the nose, length ≈ 2.4–2.6 × height, body centred in its box and inside it, wheels on the
+  car's ground line, one scale per unit for every vehicle, `pictureBox`, the canvas translate by half the box), and the automatic halo
+  (dark on, light off, ferry/train/plane off, `true`/`false` obeyed). `e2e/vehicle.spec.ts`: the picker shows Car and Campervan (and no
+  "Iveco"), the trigger and Ride tooltips use them, the Campervan has the nine presets plus custom with black checked, colouring it changes the trip (one undo step)
+  and the ride's `data-vehicle-color` and fills (glass unchanged), black takes the colour back, and a reload, the saved file and a share
+  link keep it, an old `{ kind: 'iveco-daily' }` trip opens black, a custom colour works; the long van's card is 78/64 as wide as the
+  others, inside its card, also on a phone; on the ride it is centred on the 56 × 35 marker at the standard scale, east and west; the
+  marker starts with the trip's vehicle; and one test draws the real `drawVehicle` on a real dark `<canvas>` (imported from the dev
+  server inside the page) and counts the halo pixels: black and navy glow by themselves, the white Car and a red van do not, `halo: true`
+  / `false` force it, the long van is wider than the car and centred on the anchor in both directions.
+- **Known gaps**: the Car's picture is unchanged (the original small orange-striped high-top); the long van is still a generic van, not a
+  licensed likeness; the rear-quarter window and vent do not change with the colour or open; the README screenshots still show the Car.

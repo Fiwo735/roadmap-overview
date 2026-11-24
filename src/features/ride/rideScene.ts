@@ -28,6 +28,7 @@ const LOCKED_PANES = [PANES.markers, PANES.via, PANES.routeBadges, PANES.route]
 /** Panes of the planned route, shown dimmed beneath the emphasised trail. */
 const DIMMED_PANES = [PANES.routeCasing, PANES.route, PANES.routeBadges]
 
+/** The marker's box is that of the standard 64 × 40 picture; a longer one (the Campervan) overflows it evenly on both sides (`.ride-art`'s margin). */
 const VAN_SIZE: [number, number] = [56, 35]
 /** Where the vehicle touches the line: the wheels, a little below its middle. */
 const VAN_ANCHOR: [number, number] = [28, 27]
@@ -164,10 +165,11 @@ export function createRideScene(map: LeafletMap): { destroy: () => void } {
   container.classList.add('ride-active')
 
   // ---- The vehicle
+  const startLook = resolveVehicle(useTripStore.getState().trip.vehicle)
   const vehicleIcon = divIcon({
     className: 'ride-vehicle-wrap',
     html:
-      '<div class="ride-vehicle" data-testid="ride-vehicle" data-facing="east" data-vehicle="drive" data-vehicle-kind="campervan" data-moving="false"></div>' +
+      `<div class="ride-vehicle" data-testid="ride-vehicle" data-facing="east" data-vehicle="drive" data-vehicle-kind="${startLook.kind}" data-vehicle-color="${startLook.color}" data-moving="false"></div>` +
       '<span class="ride-day-tag" data-testid="ride-day-tag"></span>',
     iconSize: VAN_SIZE,
     iconAnchor: VAN_ANCHOR,

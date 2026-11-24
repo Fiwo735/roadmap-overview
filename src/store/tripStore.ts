@@ -34,7 +34,7 @@ export interface TripState {
   setStartDate: (date: string | undefined) => void
   /**
    * The vehicle that rides the road stretches, with an optional `#rrggbb` body colour. The default
-   * campervan (and a vehicle's own colour) is stored as nothing; an unknown kind or a bad colour is ignored.
+   * vehicle (kind `campervan`, labelled Car, in its own colour) and any vehicle's own colour are stored as nothing; an unknown kind or a bad colour is ignored.
    */
   setVehicle: (kind: VehicleKind, color?: string) => void
 

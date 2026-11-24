@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VEHICLE_KINDS, VEHICLES } from '../../lib/vehicles'
 import type { LegMode } from '../../types/trip'
-import { VEHICLE_ANCHOR, VEHICLE_BOX, drawTransport, drawVehicle, shapeCacheSize, transportSvg, vehicleSvg, type VehicleContext } from './vehicles'
+import { VEHICLE_ANCHOR, VEHICLE_BOX, VEHICLE_DRAW_WIDTH, drawTransport, drawVehicle, pictureBox, shapeCacheSize, transportSvg, vehicleSvg, type VehicleContext } from './vehicles'
 
 const MODES: LegMode[] = ['drive', 'ferry', 'train', 'flight']
 const count = (text: string, part: string) => text.split(part).length - 1
 
 describe('vehicleSvg', () => {
-  it.each(VEHICLE_KINDS)('draws %s as a well-formed 64 × 40 picture with turning wheels', (kind) => {
+  it.each(VEHICLE_KINDS)('draws %s as a well-formed picture, 40 units high, with turning wheels', (kind) => {
     const svg = vehicleSvg({ kind })
     expect(svg.startsWith('<svg class="ride-art"')).toBe(true)
-    expect(svg).toContain(`viewBox="0 0 ${VEHICLE_BOX.width} ${VEHICLE_BOX.height}"`)
+    expect(svg).toContain(`viewBox="0 0 ${pictureBox('drive', { kind }).width} ${VEHICLE_BOX.height}"`)
     expect(svg.endsWith('</svg>')).toBe(true)
     expect(count(svg, '<g ')).toBe(count(svg, '</g>'))
     expect(svg).not.toMatch(/NaN|undefined|null|Infinity/)
@@ -18,6 +18,13 @@ describe('vehicleSvg', () => {
     expect(count(svg, '<path')).toBeGreaterThan(10)
     // Every path has data and every attribute is quoted.
     for (const d of svg.matchAll(/ d="([^"]*)"/g)) expect(d[1].length).toBeGreaterThan(4)
+  })
+
+  it.each(VEHICLE_KINDS)('draws %s at the same scale as every other vehicle: 56 / 64 px per unit, 35 px high', (kind) => {
+    const svg = vehicleSvg({ kind })
+    const units = +/viewBox="0 0 ([\d.]+) 40"/.exec(svg)![1]
+    expect(+/ width="([\d.]+)"/.exec(svg)![1]).toBeCloseTo((units * VEHICLE_DRAW_WIDTH) / VEHICLE_BOX.width, 2)
+    expect(+/ height="([\d.]+)"/.exec(svg)![1]).toBeCloseTo(35, 5)
   })
 
   it('draws a different picture for every vehicle', () => {
@@ -34,23 +41,18 @@ describe('vehicleSvg', () => {
   it('paints the body in the chosen colour, in any spelling', () => {
     expect(vehicleSvg({ kind: 'retro-bus', color: '#d4382c' })).toContain('#d4382c')
     expect(vehicleSvg({ kind: 'retro-bus', color: '#D4382C' })).toBe(vehicleSvg({ kind: 'retro-bus', color: '#d4382c' }))
-    for (const kind of VEHICLE_KINDS.filter((k) => VEHICLES[k].colorable)) {
+    for (const kind of VEHICLE_KINDS) {
       expect(vehicleSvg({ kind, color: '#ff00aa' })).toContain('#ff00aa')
       expect(vehicleSvg({ kind, color: '#ff00aa' })).not.toBe(vehicleSvg({ kind }))
     }
   })
 
-  it('keeps the Daily black whatever colour is asked for', () => {
-    expect(vehicleSvg({ kind: 'iveco-daily', color: '#ff00aa' })).toBe(vehicleSvg({ kind: 'iveco-daily' }))
-    expect(vehicleSvg({ kind: 'iveco-daily' })).toContain(VEHICLES['iveco-daily'].defaultColor)
-    expect(vehicleSvg({ kind: 'iveco-daily' })).not.toContain('#ff00aa')
-  })
 
   it('mirrors for west and never rotates', () => {
     const east = vehicleSvg({ kind: 'iveco-daily' }, 'east')
     const west = vehicleSvg({ kind: 'iveco-daily' }, 'west')
     expect(east).not.toContain('scale(-1 1)')
-    expect(west).toContain(`translate(${VEHICLE_BOX.width} 0) scale(-1 1)`)
+    expect(west).toContain(`translate(${pictureBox('drive', { kind: 'iveco-daily' }).width} 0) scale(-1 1)`)
     expect(west).not.toContain('rotate')
     expect(vehicleSvg({ kind: 'iveco-daily' })).toBe(east)
   })
@@ -65,6 +67,123 @@ describe('vehicleSvg', () => {
     expect(shapeCacheSize()).toBeGreaterThan(0)
     // The look in use is still drawn right after the trial colours are gone.
     expect(vehicleSvg({ kind: 'campervan', color: '#abcdef' })).toContain('#abcdef')
+  })
+})
+
+describe('the Campervan (kind iveco-daily)', () => {
+  const own = VEHICLES['iveco-daily'].defaultColor
+  const van = (color?: string) => vehicleSvg({ kind: 'iveco-daily', color })
+
+  it('is black by default and takes any colour', () => {
+    expect(own).toBe('#15181d')
+    expect(van()).toContain(`fill="${own}"`)
+    expect(van()).toBe(van(own))
+    expect(van('#ff00aa')).toContain('fill="#ff00aa"')
+    expect(van('#ff00aa')).not.toContain(`fill="${own}"`)
+    expect(van('#FF00AA')).toBe(van('#ff00aa'))
+  })
+
+  it('paints the body only: the colour is the one fill that changes between colours of the same brightness', () => {
+    // Two dark and two light colours share their highlights, so swapping the colour text swaps nothing else.
+    expect(van('#7a1010').replaceAll('#7a1010', own)).toBe(van())
+    expect(van('#f4f1e8').replaceAll('#f4f1e8', '#c5ccd6')).toBe(van('#c5ccd6'))
+    expect(van('#ff00aa').match(/#ff00aa/g)).toHaveLength(1)
+  })
+
+  it('keeps glass, wheels and lights as they are in every colour', () => {
+    for (const color of [undefined, '#ffffff', '#d4382c', '#2f6fd1']) {
+      const svg = van(color)
+      for (const part of ['#1b2638', '#0b0d10', '#aab2be', '#f3f4f6', '#dc2626']) expect(svg).toContain(part)
+      expect(count(svg, 'class="ride-wheel"')).toBe(2)
+    }
+  })
+
+  it('has the highlights of a dark body on black and the creases of a light one on white', () => {
+    expect(van()).toContain('stroke="#ffffff"')
+    expect(van('#ffffff')).not.toContain('stroke="#ffffff"')
+  })
+
+  /** The extent of absolute path data (M, H, V, L, Q). */
+  function extent(d: string) {
+    const xs: number[] = []
+    const ys: number[] = []
+    for (const [, cmd, args] of d.matchAll(/([MHVLQZ])([^MHVLQZ]*)/g)) {
+      const v = args.trim().split(/[\s,]+/).filter(Boolean).map(Number)
+      if (cmd === 'H') xs.push(v[0])
+      else if (cmd === 'V') ys.push(v[0])
+      else if (cmd === 'M' || cmd === 'L') {
+        xs.push(v[0])
+        ys.push(v[1])
+      } else if (cmd === 'Q') {
+        xs.push(v[2])
+        ys.push(v[3])
+      }
+    }
+    return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) }
+  }
+
+  const wheelsOf = (svg: string) =>
+    [...svg.matchAll(/class="ride-wheel" style="transform-origin:([\d.]+)px ([\d.]+)px"><path d="M([\d.]+) [\d.]+a([\d.]+)/g)]
+      .map((m) => ({ cx: +m[1], cy: +m[2], r: +m[4] }))
+      .sort((a, b) => a.cx - b.cx)
+
+  it('is long: wider than the standard box, at the standard scale, and centred on its anchor', () => {
+    const box = pictureBox('drive', { kind: 'iveco-daily' })
+    expect(box.height).toBe(VEHICLE_BOX.height)
+    expect(box.width).toBeGreaterThanOrEqual(78)
+    expect(box.width).toBeLessThanOrEqual(84)
+    const svg = van()
+    expect(svg).toContain(`viewBox="0 0 ${box.width} 40"`)
+    expect(svg).toContain(`style="--units:${box.width}"`)
+    expect(svg).toContain(`width="${(box.width * 56) / 64}" height="35"`)
+    // The body is centred in its box, so the marker's centre (the anchor) is the van's centre and mirroring stays in place.
+    const { left, right } = extent(/<path d="([^"]+)" fill="#15181d"/.exec(svg)![1])
+    expect((left + right) / 2).toBeCloseTo(box.width / 2, 0)
+  })
+
+  it('is a real L4: a long wheelbase and a long tail, about 2.5 times as long as it is high', () => {
+    const svg = van('#7a1010')
+    const body = extent(/<path d="([^"]+)" fill="#7a1010"/.exec(svg)![1])
+    const [rear, front] = wheelsOf(svg)
+    expect(rear && front).toBeTruthy()
+    const wheelbase = front.cx - rear.cx
+    const tailBeyondTyre = rear.cx - rear.r - body.left
+    // As long a wheelbase as the old van had (36) or longer, and a tail of about a quarter of it or more beyond the rear tyre
+    // (the old tail was about 0.14 of its wheelbase).
+    expect(wheelbase).toBeGreaterThanOrEqual(40)
+    expect(tailBeyondTyre).toBeGreaterThanOrEqual(wheelbase * 0.25)
+    expect(tailBeyondTyre).toBeGreaterThan(body.right - (front.cx + front.r))
+    // Overall length against height (roof to the ground under the wheels).
+    const ratio = (body.right - body.left) / (rear.cy + rear.r - body.top)
+    expect(ratio).toBeGreaterThanOrEqual(2.4)
+    expect(ratio).toBeLessThanOrEqual(2.6)
+  })
+
+  it('keeps its wheels on the line and everything inside its box', () => {
+    const svg = van('#7a1010')
+    const box = pictureBox('drive', { kind: 'iveco-daily' })
+    const body = extent(/<path d="([^"]+)" fill="#7a1010"/.exec(svg)![1])
+    expect(body.left).toBeGreaterThanOrEqual(0)
+    expect(body.right).toBeLessThanOrEqual(box.width)
+    const wheels = wheelsOf(svg)
+    expect(wheels).toHaveLength(2)
+    // The standard van's wheels stand on the same line.
+    const [car] = wheelsOf(vehicleSvg({ kind: 'campervan' }))
+    for (const w of wheels) expect(w.cy + w.r).toBeCloseTo(car.cy + car.r, 0)
+    expect(wheels[0].cy + wheels[0].r).toBeCloseTo(36.8, 1)
+  })
+})
+
+describe('pictureBox', () => {
+  it('is the standard 64 × 40 for every vehicle but the Campervan, and for the ferry, train and plane', () => {
+    for (const kind of VEHICLE_KINDS.filter((k) => k !== 'iveco-daily')) expect(pictureBox('drive', { kind })).toEqual(VEHICLE_BOX)
+    expect(pictureBox('drive', undefined)).toEqual(VEHICLE_BOX)
+    for (const mode of ['ferry', 'train', 'flight'] as const) expect(pictureBox(mode, { kind: 'iveco-daily' })).toEqual(VEHICLE_BOX)
+    expect(pictureBox('drive', { kind: 'iveco-daily' }).width).toBeGreaterThan(VEHICLE_BOX.width)
+  })
+
+  it('does not depend on the colour', () => {
+    expect(pictureBox('drive', { kind: 'iveco-daily', color: '#ff00aa' })).toEqual(pictureBox('drive', { kind: 'iveco-daily' }))
   })
 })
 
@@ -149,6 +268,19 @@ describe('drawVehicle', () => {
     expect(named(calls, 'translate')[1]).toEqual(['translate', -VEHICLE_ANCHOR.x, -VEHICLE_ANCHOR.y])
   })
 
+  it('draws the long Campervan at the same scale, centred on its own anchor, so it comes out wider', () => {
+    const { ctx, calls } = fakeContext()
+    drawVehicle(ctx, { kind: 'iveco-daily' }, 100, 80, 'east', 128)
+    expect(named(calls, 'translate')[0]).toEqual(['translate', 100, 80])
+    expect(named(calls, 'scale')[0]).toEqual(['scale', 2, 2])
+    expect(named(calls, 'translate')[1]).toEqual(['translate', -pictureBox('drive', { kind: 'iveco-daily' }).width / 2, -VEHICLE_ANCHOR.y])
+    // Mirrored, the middle stays where it is.
+    const west = fakeContext()
+    drawVehicle(west.ctx, { kind: 'iveco-daily' }, 100, 80, 'west', 128)
+    expect(named(west.calls, 'scale')[0]).toEqual(['scale', -2, 2])
+    expect(named(west.calls, 'translate')[1]).toEqual(named(calls, 'translate')[1])
+  })
+
   it('draws 56 px wide unless told otherwise', () => {
     const { ctx, calls } = fakeContext()
     drawVehicle(ctx, undefined, 0, 0)
@@ -178,7 +310,7 @@ describe('drawVehicle', () => {
     expect(fills).toContain('#ff00aa')
   })
 
-  it('draws the halo only when asked, behind the vehicle, and switches the glow off again', () => {
+  it('draws the halo when asked, behind the vehicle, and switches the glow off again', () => {
     const plain = fakeContext()
     drawVehicle(plain.ctx, undefined, 0, 0)
     expect(named(plain.calls, 'fill').some((c) => (c[2] as { shadowBlur: number }).shadowBlur > 0)).toBe(false)
@@ -189,6 +321,38 @@ describe('drawVehicle', () => {
     expect(blurs[0]).toBeGreaterThan(0)
     expect(blurs[blurs.length - 1]).toBe(0)
     expect(named(haloed.calls, 'fill').length).toBeGreaterThan(named(plain.calls, 'fill').length)
+  })
+
+  describe('the halo left to itself', () => {
+    const glows = (draw: (ctx: VehicleContext) => void): boolean => {
+      const { ctx, calls } = fakeContext()
+      draw(ctx)
+      return named(calls, 'fill').some((c) => (c[2] as { shadowBlur: number }).shadowBlur > 0)
+    }
+
+    it('lights a dark body, so a black campervan stays visible on dark tiles', () => {
+      expect(glows((ctx) => drawVehicle(ctx, { kind: 'iveco-daily' }, 0, 0))).toBe(true)
+      expect(glows((ctx) => drawVehicle(ctx, { kind: 'iveco-daily', color: '#1a2a6c' }, 0, 0))).toBe(true)
+      expect(glows((ctx) => drawVehicle(ctx, { kind: 'retro-bus', color: '#15181d' }, 0, 0))).toBe(true)
+      expect(glows((ctx) => drawTransport(ctx, 'drive', { kind: 'iveco-daily' }, 0, 0))).toBe(true)
+    })
+
+    it('leaves a light or coloured body alone', () => {
+      expect(glows((ctx) => drawVehicle(ctx, undefined, 0, 0))).toBe(false)
+      expect(glows((ctx) => drawVehicle(ctx, { kind: 'iveco-daily', color: '#ffffff' }, 0, 0))).toBe(false)
+      expect(glows((ctx) => drawVehicle(ctx, { kind: 'iveco-daily', color: '#d4382c' }, 0, 0))).toBe(false)
+    })
+
+    it('does not light a ferry, train or plane, whatever the trip\'s vehicle', () => {
+      for (const mode of ['ferry', 'train', 'flight'] as const) expect(glows((ctx) => drawTransport(ctx, mode, { kind: 'iveco-daily' }, 0, 0))).toBe(false)
+    })
+
+    it('obeys the caller: true and false force it either way', () => {
+      expect(glows((ctx) => drawVehicle(ctx, { kind: 'iveco-daily' }, 0, 0, 'east', 56, { halo: false }))).toBe(false)
+      expect(glows((ctx) => drawVehicle(ctx, undefined, 0, 0, 'east', 56, { halo: true }))).toBe(true)
+      expect(glows((ctx) => drawTransport(ctx, 'ferry', undefined, 0, 0, 'east', 56, { halo: true }))).toBe(true)
+      expect(glows((ctx) => drawTransport(ctx, 'drive', { kind: 'iveco-daily' }, 0, 0, 'east', 56, { halo: false }))).toBe(false)
+    })
   })
 
   it('multiplies the caller\'s opacity into every shape, so the whole vehicle can fade, and gives it back', () => {

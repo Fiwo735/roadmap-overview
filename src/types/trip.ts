@@ -78,7 +78,11 @@ export interface Leg {
   label?: string
 }
 
-/** The vehicles the ride can drive on road stretches (registry and artwork: src/lib/vehicles.ts, features/ride/vehicles.ts). */
+/**
+ * The vehicles the ride can drive on road stretches (registry and artwork: src/lib/vehicles.ts, features/ride/vehicles.ts).
+ * The ids are stored in trips and links, so they never change; the names shown differ for two: `campervan` is labelled
+ * "Car" and `iveco-daily` "Campervan".
+ */
 export type VehicleKind = 'campervan' | 'iveco-daily' | 'retro-bus' | 'motorhome' | 'caravan' | 'offroad'
 
 /** The vehicle that rides the trip's road stretches (ferries, trains and flights keep their own). */
@@ -94,7 +98,7 @@ export interface Trip {
   subtitle?: string
   /** Calendar date (YYYY-MM-DD) of the earliest day used by any place. Optional. */
   startDate?: string
-  /** Added without a version bump: missing means the default campervan. Kept canonical: never the default itself. */
+  /** Added without a version bump: missing means the default vehicle (kind `campervan`, labelled Car). Kept canonical: never the default itself. */
   vehicle?: TripVehicle
   places: Place[]
   legs: Leg[]

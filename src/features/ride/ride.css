@@ -105,6 +105,8 @@
 .ride-vehicle .ride-art {
   display: block;
   overflow: visible;
+  /* A picture wider than the standard 64 units (the long Campervan, `--units` wide) stands centred on the marker's 56 px box, which is its anchor and the centre of the flip. */
+  margin-left: calc((64 - var(--units, 64)) * 0.4375px);
 }
 
 .ride-vehicle[data-moving='true'] .ride-art {

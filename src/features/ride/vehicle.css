@@ -113,8 +113,9 @@
 
 .vehicle-option__art svg {
   display: block;
-  width: 100%;
-  max-width: 112px;
+  /* The same scale for every vehicle (1.75 px per unit): a long one (`--units` wide) is wider, within the card. */
+  width: calc(var(--units, 64) * 1.75px);
+  max-width: 100%;
   height: auto;
   margin: 0 auto;
   filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 2px 2px rgba(15, 23, 42, 0.3));
@@ -142,12 +143,6 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-}
-
-.vehicle-colors__note {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
 }
 
 .vehicle-swatches {

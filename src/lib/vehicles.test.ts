@@ -6,6 +6,7 @@ import {
   VEHICLE_KINDS,
   canonicalVehicle,
   darken,
+  isDarkBody,
   isVehicleKind,
   lighten,
   luminance,
@@ -30,11 +31,18 @@ describe('the registry', () => {
     expect(new Set(VEHICLE_KINDS.map((k) => VEHICLES[k].label)).size).toBe(VEHICLE_KINDS.length)
   })
 
-  it('has the campervan as the default and the black Iveco Daily with a fixed colour', () => {
+  it('keeps the stored ids but shows new names: kind campervan is the Car, kind iveco-daily the Campervan', () => {
     expect(DEFAULT_VEHICLE_KIND).toBe('campervan')
-    expect(VEHICLES['iveco-daily'].label).toBe('Iveco Daily (black)')
+    expect(VEHICLES.campervan.label).toBe('Car')
+    expect(VEHICLES['iveco-daily'].label).toBe('Campervan')
+    expect(VEHICLE_KINDS.map((k) => VEHICLES[k].label)).toEqual(['Car', 'Campervan', 'Retro camper bus', 'Motorhome', 'Car with caravan', '4×4 with roof tent'])
+    for (const kind of VEHICLE_KINDS) expect(VEHICLES[kind].label).not.toMatch(/iveco|daily/i)
+  })
+
+  it('draws the Campervan black unless another colour is chosen, and its black is a preset', () => {
+    expect(VEHICLES['iveco-daily'].defaultColor).toBe('#15181d')
     expect(luminance(VEHICLES['iveco-daily'].defaultColor)).toBeLessThan(0.15)
-    expect(VEHICLES['iveco-daily'].colorable).toBe(false)
+    expect(COLOR_PRESETS).toContainEqual({ value: VEHICLES['iveco-daily'].defaultColor, label: 'Black' })
   })
 
   it('offers at least six vehicles and some colour presets', () => {
@@ -80,8 +88,22 @@ describe('colours', () => {
   })
 })
 
+describe('isDarkBody', () => {
+  it('is true for black and other dark colours, which need a halo on dark ground', () => {
+    for (const color of ['#000000', '#15181d', '#1a2a6c', '#4a0d0d', '#123456']) expect(isDarkBody(color)).toBe(true)
+  })
+
+  it('is false for light and mid-tone colours', () => {
+    for (const color of ['#ffffff', '#c5ccd6', '#d4382c', '#f0c230', '#2f6fd1', '#3f9560', '#808080']) expect(isDarkBody(color)).toBe(false)
+  })
+
+  it('finds only black among the presets', () => {
+    expect(COLOR_PRESETS.filter((c) => isDarkBody(c.value)).map((c) => c.label)).toEqual(['Black'])
+  })
+})
+
 describe('resolveVehicle', () => {
-  it('is the white campervan when there is no vehicle', () => {
+  it('is the white car (kind campervan) when there is no vehicle', () => {
     expect(resolveVehicle(undefined)).toEqual({ kind: 'campervan', color: '#ffffff' })
     expect(resolveVehicle(null)).toEqual({ kind: 'campervan', color: '#ffffff' })
   })
@@ -96,8 +118,10 @@ describe('resolveVehicle', () => {
     expect(resolveVehicle({ kind: 'hovercraft', color: '#ff0000' })).toEqual({ kind: 'campervan', color: '#ff0000' })
   })
 
-  it('ignores a colour for a vehicle that has only one', () => {
-    expect(resolveVehicle({ kind: 'iveco-daily', color: '#ff0000' })).toEqual({ kind: 'iveco-daily', color: VEHICLES['iveco-daily'].defaultColor })
+  it('is black for the Campervan, and any colour can be chosen for it', () => {
+    expect(resolveVehicle({ kind: 'iveco-daily' })).toEqual({ kind: 'iveco-daily', color: '#15181d' })
+    expect(resolveVehicle({ kind: 'iveco-daily', color: '#FF0000' })).toEqual({ kind: 'iveco-daily', color: '#ff0000' })
+    expect(resolveVehicle({ kind: 'iveco-daily', color: 'nonsense' })).toEqual({ kind: 'iveco-daily', color: '#15181d' })
   })
 })
 
@@ -109,10 +133,21 @@ describe('canonicalVehicle', () => {
     expect(canonicalVehicle('campervan', null)).toBeUndefined()
   })
 
-  it('drops a colour that is the vehicle\'s own, or not allowed, or not a colour', () => {
+  it('drops a colour that is the vehicle\'s own, or not a colour', () => {
     expect(canonicalVehicle('retro-bus', VEHICLES['retro-bus'].defaultColor)).toEqual({ kind: 'retro-bus' })
-    expect(canonicalVehicle('iveco-daily', '#ff0000')).toEqual({ kind: 'iveco-daily' })
     expect(canonicalVehicle('offroad', 'nope')).toEqual({ kind: 'offroad' })
+  })
+
+  it('stores the Campervan\'s own black as nothing and any other colour as #rrggbb', () => {
+    expect(canonicalVehicle('iveco-daily')).toEqual({ kind: 'iveco-daily' })
+    expect(canonicalVehicle('iveco-daily', '#15181d')).toEqual({ kind: 'iveco-daily' })
+    expect(canonicalVehicle('iveco-daily', '#15181D')).toEqual({ kind: 'iveco-daily' })
+    expect(canonicalVehicle('iveco-daily', '#ff0000')).toEqual({ kind: 'iveco-daily', color: '#ff0000' })
+    expect(canonicalVehicle('iveco-daily', '#FFF')).toEqual({ kind: 'iveco-daily', color: '#ffffff' })
+  })
+
+  it('keeps a black Car, which is not its own colour', () => {
+    expect(canonicalVehicle('campervan', '#15181d')).toEqual({ kind: 'campervan', color: '#15181d' })
   })
 
   it('keeps a chosen colour as #rrggbb', () => {
@@ -123,14 +158,17 @@ describe('canonicalVehicle', () => {
 
 describe('labels and equality', () => {
   it('names the vehicle', () => {
-    expect(vehicleLabel(undefined)).toBe('Campervan')
-    expect(vehicleLabel({ kind: 'iveco-daily' })).toBe('Iveco Daily (black)')
+    expect(vehicleLabel(undefined)).toBe('Car')
+    expect(vehicleLabel({ kind: 'campervan' })).toBe('Car')
+    expect(vehicleLabel({ kind: 'iveco-daily' })).toBe('Campervan')
+    expect(vehicleLabel({ kind: 'iveco-daily', color: '#ff0000' })).toBe('Campervan')
   })
 
   it('compares what the ride would draw, not how it is written', () => {
     expect(sameVehicle(undefined, { kind: 'campervan' })).toBe(true)
     expect(sameVehicle(undefined, { kind: 'campervan', color: '#ffffff' })).toBe(true)
-    expect(sameVehicle({ kind: 'iveco-daily', color: '#ff0000' }, { kind: 'iveco-daily' })).toBe(true)
+    expect(sameVehicle({ kind: 'iveco-daily', color: '#15181D' }, { kind: 'iveco-daily' })).toBe(true)
+    expect(sameVehicle({ kind: 'iveco-daily', color: '#ff0000' }, { kind: 'iveco-daily' })).toBe(false)
     expect(sameVehicle({ kind: 'campervan', color: '#ff0000' }, { kind: 'campervan' })).toBe(false)
     expect(sameVehicle({ kind: 'offroad' }, { kind: 'caravan' })).toBe(false)
   })
@@ -147,16 +185,19 @@ describe('parseVehicle', () => {
   it('reads a good vehicle in canonical form', () => {
     const warnings: string[] = []
     expect(parseVehicle({ kind: 'iveco-daily' }, warnings)).toEqual({ kind: 'iveco-daily' })
+    expect(parseVehicle({ kind: 'iveco-daily', color: '#D4382C' }, warnings)).toEqual({ kind: 'iveco-daily', color: '#d4382c' })
+    expect(parseVehicle({ kind: 'iveco-daily', color: '#15181d' }, warnings)).toEqual({ kind: 'iveco-daily' })
     expect(parseVehicle({ kind: 'motorhome', color: '#D4382C' }, warnings)).toEqual({ kind: 'motorhome', color: '#d4382c' })
     expect(parseVehicle({ kind: 'campervan', color: '#ffffff' }, warnings)).toBeUndefined()
     expect(warnings).toEqual([])
   })
 
-  it('falls back to the campervan for an unknown kind and says so', () => {
+  it('falls back to the default vehicle for an unknown kind and says so, naming it as the picker does', () => {
     const warnings: string[] = []
     expect(parseVehicle({ kind: 'hovercraft', color: '#ff0000' }, warnings)).toBeUndefined()
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('hovercraft')
+    expect(warnings[0]).toContain('the car is used')
   })
 
   it('keeps the kind and drops a bad colour, and says so', () => {
@@ -170,6 +211,7 @@ describe('parseVehicle', () => {
     const warnings: string[] = []
     expect(parseVehicle(raw, warnings)).toBeUndefined()
     expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('the car is used')
   })
 
   it('keeps an absurdly long kind out of the warning', () => {

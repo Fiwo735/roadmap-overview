@@ -47,7 +47,6 @@ function VehiclePanel({ trigger, onClose }: { trigger: HTMLElement; onClose: (re
   const id = useId()
   const vehicle = useTripStore((s) => s.trip.vehicle)
   const current = resolveVehicle(vehicle)
-  const meta = VEHICLES[current.kind]
   const shown = tried?.kind === current.kind ? tried.color : current.color
   const isPreset = COLOR_PRESETS.some((c) => c.value === current.color)
 
@@ -97,7 +96,7 @@ function VehiclePanel({ trigger, onClose }: { trigger: HTMLElement; onClose: (re
     }
     input.addEventListener('change', commit)
     return () => input.removeEventListener('change', commit)
-  }, [meta.colorable])
+  }, [])
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape') {
@@ -170,36 +169,30 @@ function VehiclePanel({ trigger, onClose }: { trigger: HTMLElement; onClose: (re
         <span className="vehicle-colors__title" id={`${id}-colors`}>
           Body colour
         </span>
-        {meta.colorable ? (
-          <div role="radiogroup" aria-labelledby={`${id}-colors`} className="vehicle-swatches" data-group="colors">
-            {COLOR_PRESETS.map((c) => {
-              const checked = c.value === current.color
-              return (
-                <button
-                  key={c.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={checked}
-                  aria-label={c.label}
-                  title={c.label}
-                  tabIndex={checked || (!isPreset && c.value === COLOR_PRESETS[0].value) ? 0 : -1}
-                  className="vehicle-swatch"
-                  data-testid="vehicle-color"
-                  data-color={c.value}
-                  style={{ '--swatch': c.value } as CSSProperties}
-                  onClick={() => choose(current.kind, c.value)}
-                />
-              )
-            })}
-            <label className="vehicle-swatch vehicle-swatch--custom" data-checked={!isPreset || undefined} title="Custom colour" style={{ '--swatch': shown } as CSSProperties}>
-              <input ref={colorInput} type="color" aria-label="Custom colour" data-testid="vehicle-color-custom" value={shown} onChange={(e) => setTried({ kind: current.kind, color: e.target.value })} />
-            </label>
-          </div>
-        ) : (
-          <p className="vehicle-colors__note" data-testid="vehicle-colors-note">
-            {meta.label} has a fixed colour.
-          </p>
-        )}
+        <div role="radiogroup" aria-labelledby={`${id}-colors`} className="vehicle-swatches" data-group="colors">
+          {COLOR_PRESETS.map((c) => {
+            const checked = c.value === current.color
+            return (
+              <button
+                key={c.value}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                aria-label={c.label}
+                title={c.label}
+                tabIndex={checked || (!isPreset && c.value === COLOR_PRESETS[0].value) ? 0 : -1}
+                className="vehicle-swatch"
+                data-testid="vehicle-color"
+                data-color={c.value}
+                style={{ '--swatch': c.value } as CSSProperties}
+                onClick={() => choose(current.kind, c.value)}
+              />
+            )
+          })}
+          <label className="vehicle-swatch vehicle-swatch--custom" data-checked={!isPreset || undefined} title="Custom colour" style={{ '--swatch': shown } as CSSProperties}>
+            <input ref={colorInput} type="color" aria-label="Custom colour" data-testid="vehicle-color-custom" value={shown} onChange={(e) => setTried({ kind: current.kind, color: e.target.value })} />
+          </label>
+        </div>
       </div>
     </div>
   )

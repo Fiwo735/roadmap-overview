@@ -342,7 +342,7 @@ describe('the vehicle', () => {
     expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily' })
   })
 
-  it('stores the default campervan as no vehicle at all', () => {
+  it('stores the default vehicle (kind campervan, the Car) as no vehicle at all', () => {
     s().setVehicle('offroad')
     s().setVehicle('campervan')
     expect(s().trip).not.toHaveProperty('vehicle')
@@ -357,9 +357,21 @@ describe('the vehicle', () => {
     s().setVehicle('caravan')
     s().setVehicle('caravan', '#2f6fd1')
     expect(temporal().pastStates).toHaveLength(1)
-    s().setVehicle('iveco-daily', '#ff0000')
+    // The Campervan's own black is no change from its default.
+    s().setVehicle('iveco-daily', '#15181D')
     s().setVehicle('iveco-daily')
     expect(temporal().pastStates).toHaveLength(2)
+  })
+
+  it('colours the Campervan, and a colour on it is one more undo step', () => {
+    s().setVehicle('iveco-daily')
+    s().setVehicle('iveco-daily', '#D4382C')
+    expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily', color: '#d4382c' })
+    s().setVehicle('iveco-daily', '#15181d')
+    expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily' })
+    expect(temporal().pastStates).toHaveLength(3)
+    undo()
+    expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily', color: '#d4382c' })
   })
 
   it('ignores an unknown kind and a bad colour', () => {

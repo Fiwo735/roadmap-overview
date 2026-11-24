@@ -5,7 +5,7 @@
 **Roadmap Overview** is a browser app for summarising a campervan trip on an [OpenStreetMap](https://www.openstreetmap.org/) map. You
 add the places you stop at, give each a day, and the app draws the route between them: roads you can reshape by dragging the line (like
 Google Maps), plus ferry, train and flight legs drawn by hand. A title card shows the distance, driving time, days and the countries you
-pass; a little campervan can *ride* the route day by day; and the trip can be saved as a file, shared as a link, shown full-screen or
+pass; a little vehicle can *ride* the route day by day; and the trip can be saved as a file, shared as a link, shown full-screen or
 exported as a picture or a video of the ride. Everything runs in the browser: there is no backend and no account, and the trip stays in your browser until you
 save or share it.
 
@@ -66,12 +66,12 @@ hours ("34 h 28 min"). Fold the card into a pill with the chevron.
 
 ### Ride
 
-**Ride** plays the trip as your vehicle (a campervan unless you choose another) driving the route day by day (a ferry, train or plane on those legs), with a trail behind it, the
+**Ride** plays the trip as your vehicle (a car unless you choose another) driving the route day by day (a ferry, train or plane on those legs), with a trail behind it, the
 day and date, the distance so far and a scrubber. Space plays or pauses, ← and → jump between days, **Follow** keeps the camera on the
 vehicle, Esc closes it. The clapperboard button in the controls, **Record video**, opens the [video export](#video-export).
 
-**Choose the vehicle** with the small arrow next to the Ride button: a campervan (the default), a black **Iveco Daily**, a retro camper bus,
-a motorhome, a car with a caravan or a 4×4 with a roof tent. Each has a few body colours and a free choice (the Daily is always black). The
+**Choose the vehicle** with the small arrow next to the Ride button: a **Car** (the default), a long **Campervan** (a high-roof van with a long rear overhang, black unless you pick
+a colour), a retro camper bus, a motorhome, a car with a caravan or a 4×4 with a roof tent. Each has a few body colours and a free choice. The
 vehicle is part of the trip, so it is one undo step, is saved in the file and travels in share links; ferries, trains and planes keep their
 own pictures. New trips (File → New trip, a first visit, the sample trip) start with the vehicle you chose last; a file or link keeps its own.
 It cannot be changed while a ride runs or in presentation mode.
@@ -222,8 +222,10 @@ A trip is saved as a JSON file (`*.trip.json`). The format is the **data contrac
   cache of the road geometry, keyed by leg id; the app only trusts a cached route whose `key` matches the trip, otherwise it routes the leg
   again. A file without `routes` opens fine and is routed on arrival.
 - **Days** are integers ≥ 0 on which a place is reached; they may be typed out of order (the app uses the running maximum).
-- **`vehicle`** (optional) is what the ride drives on roads: `kind` is one of `campervan` (also what a missing `vehicle` means),
-  `iveco-daily`, `retro-bus`, `motorhome`, `caravan` or `offroad`, and `color` is an optional body colour as `#rrggbb`.
+- **`vehicle`** (optional) is what the ride drives on roads: `kind` is one of `campervan` (the **Car** in the picker, and what a
+  missing `vehicle` means), `iveco-daily` (the **Campervan** in the picker, black unless coloured), `retro-bus`, `motorhome`,
+  `caravan` or `offroad`, and `color` is an optional body colour as `#rrggbb`. The kind ids are stored in files and links, so they
+  keep their names even where the picker's labels differ.
 - **Versioning.** `version` is the file format version (currently `1`). Additive, optional fields do not bump it; a change that older
   files cannot satisfy does, together with a migration in `src/lib/tripFile.ts`. A file with a *newer* version is refused with a message.
 - **Opening is forgiving**: invalid places are dropped, bad days rounded, unknown modes become `drive` and every repair is reported in a

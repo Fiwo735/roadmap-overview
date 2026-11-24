@@ -66,31 +66,36 @@ async function savedFile(page: Page): Promise<TripFile> {
 }
 
 test.describe('the vehicle picker', () => {
-  test('sits beside the Ride button, and the campervan is what a trip starts with', async ({ page, app }) => {
+  test('sits beside the Ride button, and the Car (kind campervan) is what a trip starts with', async ({ page, app }) => {
     await openTrip(page, app, 'Lyon', 'Annecy')
     await expect(vehicleButton(page)).toBeVisible()
-    await expect(vehicleButton(page)).toHaveAccessibleName('Choose vehicle (currently Campervan)')
+    await expect(vehicleButton(page)).toHaveAccessibleName('Choose vehicle (currently Car)')
     await expect(rideButton(page)).toHaveAccessibleName('Ride')
     // Joined to the Ride button, to its right.
     const [ride, chevron] = await Promise.all([rideButton(page).boundingBox(), vehicleButton(page).boundingBox()])
     expect(Math.abs(chevron!.x - (ride!.x + ride!.width))).toBeLessThan(2)
     expect(chevron!.height).toBeCloseTo(ride!.height, 0)
     await vehicleButton(page).hover()
-    await expect(page.locator('.tooltip')).toHaveText('Vehicle: Campervan')
+    await expect(page.locator('.tooltip')).toHaveText('Vehicle: Car')
     await rideButton(page).hover()
-    await expect(page.locator('.tooltip')).toHaveText('Ride the route day by day. Vehicle: Campervan')
+    await expect(page.locator('.tooltip')).toHaveText('Ride the route day by day. Vehicle: Car')
     expect(await tripVehicle(app)).toBeUndefined()
     await rideAt(page, app)
     await expect(van(page)).toHaveAttribute('data-vehicle-kind', 'campervan')
   })
 
-  test('opens a panel with every vehicle, and the Iveco Daily is named as the black van it is', async ({ page, app }) => {
+  test('opens a panel with every vehicle: the first is the Car, the second the Campervan, and no name says Iveco', async ({ page, app }) => {
     await app.goto()
     await openPicker(page)
     await expect(vehicleButton(page)).toHaveAttribute('aria-expanded', 'true')
     const kinds = await page.locator('[data-testid="vehicle-option"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-kind')))
     expect(kinds).toEqual(['campervan', 'iveco-daily', 'retro-bus', 'motorhome', 'caravan', 'offroad'])
-    await expect(option(page, 'iveco-daily')).toContainText('Iveco Daily (black)')
+    // The stored kinds keep their ids; only the names changed.
+    const names = await page.locator('.vehicle-option__name').allTextContents()
+    expect(names).toEqual(['Car', 'Campervan', 'Retro camper bus', 'Motorhome', 'Car with caravan', '4×4 with roof tent'])
+    await expect(option(page, 'campervan').locator('.vehicle-option__name')).toHaveText('Car')
+    await expect(option(page, 'iveco-daily').locator('.vehicle-option__name')).toHaveText('Campervan')
+    await expect(panel(page)).not.toContainText(/iveco|daily/i)
     await expect(option(page, 'campervan')).toHaveAttribute('aria-checked', 'true')
     // Each card shows its picture.
     for (const kind of kinds) await expect(option(page, kind!).locator('svg')).toBeVisible()
@@ -98,15 +103,15 @@ test.describe('the vehicle picker', () => {
     await expect(option(page, 'campervan')).toBeFocused()
   })
 
-  test('choosing the Iveco Daily puts it in the trip and the ride shows it', async ({ page, app }) => {
+  test('choosing the Campervan puts it in the trip and the ride shows it, in black', async ({ page, app }) => {
     await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
     await choose(page, 'iveco-daily')
     expect(await tripVehicle(app)).toEqual({ kind: 'iveco-daily' })
     await expect(vehicleButton(page)).toHaveAttribute('data-vehicle-kind', 'iveco-daily')
-    await expect(vehicleButton(page)).toHaveAccessibleName('Choose vehicle (currently Iveco Daily (black))')
+    await expect(vehicleButton(page)).toHaveAccessibleName('Choose vehicle (currently Campervan)')
     await page.keyboard.press('Escape')
     await rideButton(page).hover()
-    await expect(page.locator('.tooltip').filter({ hasText: 'Ride the route' })).toHaveText('Ride the route day by day. Vehicle: Iveco Daily (black)')
+    await expect(page.locator('.tooltip').filter({ hasText: 'Ride the route' })).toHaveText('Ride the route day by day. Vehicle: Campervan')
 
     await rideAt(page, app, 0.6 + 1.2)
     await expect(panel(page)).toHaveCount(0)
@@ -217,7 +222,7 @@ test.describe('the vehicle picker', () => {
     await expect(van(page)).toHaveAttribute('data-vehicle-color', '#d4382c')
   })
 
-  test('a link with a damaged vehicle opens with the campervan and says what was repaired', async ({ page, app }) => {
+  test('a link with a damaged vehicle opens with the car and says what was repaired', async ({ page, app }) => {
     await app.goto()
     const file = {
       format: 'roadmap-overview/trip',
@@ -226,7 +231,7 @@ test.describe('the vehicle picker', () => {
       trip: { id: 'damaged', title: 'Damaged', places: [{ id: 'a', name: 'Lyon', lat: 45.76, lng: 4.83, day: 0 }], legs: [], vehicle: { kind: 'hovercraft', color: 12 } },
     }
     await page.evaluate((hash) => (location.hash = hash), '#trip=' + lz.compressToEncodedURIComponent(JSON.stringify(file)))
-    await expect(page.getByTestId('toast').first()).toContainText('is not known; the campervan is used')
+    await expect(page.getByTestId('toast').first()).toContainText('is not known; the car is used')
     expect((await app.trip()).title).toBe('Damaged')
     expect(await tripVehicle(app)).toBeUndefined()
   })
@@ -253,7 +258,7 @@ test.describe('the vehicle picker', () => {
     expect(await tripVehicle(app)).toEqual({ kind: 'offroad' })
   })
 
-  test('the Daily chosen once is the Daily of the next new trip, also after a reload', async ({ page, app }) => {
+  test('the Campervan chosen once is the Campervan of the next new trip, also after a reload', async ({ page, app }) => {
     await openTrip(page, app, 'Lyon', 'Annecy')
     await choose(page, 'iveco-daily')
     await page.keyboard.press('Escape')
@@ -280,7 +285,7 @@ test.describe('the vehicle picker', () => {
     expect(await tripVehicle(app)).toBeUndefined()
     expect(JSON.parse((await preference(page))!)).toEqual({ kind: 'iveco-daily' })
 
-    // Choosing the default campervan again forgets it.
+    // Choosing the default vehicle (the Car) again forgets it.
     await choose(page, 'campervan')
     await page.keyboard.press('Escape')
     expect(await preference(page)).toBeNull()
@@ -384,12 +389,128 @@ test.describe('body colour', () => {
     await expect(custom).toHaveValue('#123456')
   })
 
-  test('the Daily has no colours to choose: it says so', async ({ page, app }) => {
+  test('the Campervan has the same colours as the others, black checked by default, and no note about a fixed colour', async ({ page, app }) => {
     await app.goto()
     await choose(page, 'iveco-daily')
-    await expect(page.getByTestId('vehicle-color')).toHaveCount(0)
-    await expect(page.getByTestId('vehicle-color-custom')).toHaveCount(0)
-    await expect(page.getByTestId('vehicle-colors-note')).toContainText('fixed colour')
+    await expect(page.getByTestId('vehicle-color')).toHaveCount(9)
+    await expect(page.getByTestId('vehicle-color-custom')).toHaveCount(1)
+    await expect(page.getByTestId('vehicle-colors-note')).toHaveCount(0)
+    await expect(swatch(page, '#15181d')).toHaveAttribute('aria-checked', 'true')
+    await expect(swatch(page, '#15181d')).toHaveAccessibleName('Black')
+    expect(await tripVehicle(app)).toEqual({ kind: 'iveco-daily' })
+    // The Car is white to begin with: switching vehicles starts in the new one's own colour.
+    await choose(page, 'campervan')
+    await expect(swatch(page, '#ffffff')).toHaveAttribute('aria-checked', 'true')
+    await choose(page, 'iveco-daily')
+    await expect(swatch(page, '#15181d')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  test('a colour for the Campervan is in the trip and on the ride, as one undo step, and black takes it back', async ({ page, app }) => {
+    await openTrip(page, app, 'Lyon', 'Annecy')
+    await choose(page, 'iveco-daily')
+    const before = (await app.history()).past
+    await swatch(page, '#d4382c').click()
+    expect(await tripVehicle(app)).toEqual({ kind: 'iveco-daily', color: '#d4382c' })
+    expect((await app.history()).past).toBe(before + 1)
+    // The card shows the colour, on the body only: the glass stays dark.
+    const card = await option(page, 'iveco-daily').locator('svg').innerHTML()
+    expect(card).toContain('fill="#d4382c"')
+    expect(card).not.toContain('fill="#15181d"')
+    expect(card).toContain('fill="#1b2638"')
+
+    await page.keyboard.press('Escape')
+    await rideAt(page, app)
+    await expect(van(page)).toHaveAttribute('data-vehicle-kind', 'iveco-daily')
+    await expect(van(page)).toHaveAttribute('data-vehicle-color', '#d4382c')
+    expect(await van(page).innerHTML()).toContain('fill="#d4382c"')
+    expect(await van(page).innerHTML()).toContain('fill="#1b2638"')
+    await page.getByTestId('ride-close').click()
+
+    // Black is the Campervan's own colour: it is stored as nothing.
+    await openPicker(page)
+    await swatch(page, '#15181d').click()
+    expect(await tripVehicle(app)).toEqual({ kind: 'iveco-daily' })
+    await page.keyboard.press('Escape')
+    await page.getByTestId('undo').click()
+    expect(await tripVehicle(app)).toEqual({ kind: 'iveco-daily', color: '#d4382c' })
+  })
+
+  test('a coloured Campervan survives a reload, goes into the saved file and a share link, and opens from both', async ({ page, app, context, mocks }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await openTrip(page, app, 'Lyon', 'Annecy')
+    await choose(page, 'iveco-daily')
+    await swatch(page, '#2f6fd1').click()
+    await page.keyboard.press('Escape')
+    const blue = { kind: 'iveco-daily', color: '#2f6fd1' }
+
+    await page.waitForTimeout(700) // autosave
+    expect((await app.savedFile())?.trip.vehicle).toEqual(blue)
+    await page.reload()
+    await app.ready()
+    expect(await tripVehicle(app)).toEqual(blue)
+    await rideAt(page, app)
+    await expect(van(page)).toHaveAttribute('data-vehicle-color', '#2f6fd1')
+    await page.getByTestId('ride-close').click()
+
+    const file = await savedFile(page)
+    expect(file.trip.vehicle).toEqual(blue)
+
+    await page.getByTestId('file-menu').click()
+    await page.getByRole('menuitem', { name: 'Copy share link' }).click()
+    const link = await page.evaluate(() => navigator.clipboard.readText())
+    const carried = lz.decompressFromEncodedURIComponent(new URL(link).hash.replace(/^#trip=/, ''))
+    expect((JSON.parse(carried!) as TripFile).trip.vehicle).toEqual(blue)
+
+    await page.goto('about:blank')
+    await page.addInitScript(() => {
+      if (location.protocol === 'about:' || sessionStorage.getItem('e2e-fresh-storage')) return
+      localStorage.clear()
+      sessionStorage.setItem('e2e-fresh-storage', '1')
+    })
+    mocks.osrm.requests.length = 0
+    await page.goto(link)
+    await app.ready()
+    expect(await tripVehicle(app)).toEqual(blue)
+    await rideAt(page, app)
+    await expect(van(page)).toHaveAttribute('data-vehicle-kind', 'iveco-daily')
+    await expect(van(page)).toHaveAttribute('data-vehicle-color', '#2f6fd1')
+  })
+
+  test('a trip saved before the colour existed ({ kind: iveco-daily } and nothing else) still opens black', async ({ page, app }) => {
+    await app.goto()
+    const file = {
+      format: 'roadmap-overview/trip',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      trip: {
+        id: 'old-daily',
+        title: 'Old Daily trip',
+        places: [
+          { id: 'a', name: 'Lyon', lat: 45.76, lng: 4.83, day: 0 },
+          { id: 'b', name: 'Annecy', lat: 45.9, lng: 6.12, day: 1 },
+        ],
+        legs: [],
+        vehicle: { kind: 'iveco-daily' },
+      },
+    }
+    await page.evaluate((hash) => (location.hash = hash), '#trip=' + lz.compressToEncodedURIComponent(JSON.stringify(file)))
+    await expect.poll(async () => (await app.trip()).title).toBe('Old Daily trip')
+    expect(await tripVehicle(app)).toEqual({ kind: 'iveco-daily' })
+    await expect(vehicleButton(page)).toHaveAccessibleName('Choose vehicle (currently Campervan)')
+    await openPicker(page)
+    await expect(swatch(page, '#15181d')).toHaveAttribute('aria-checked', 'true')
+    await page.keyboard.press('Escape')
+    await rideAt(page, app)
+    await expect(van(page)).toHaveAttribute('data-vehicle-kind', 'iveco-daily')
+    await expect(van(page)).toHaveAttribute('data-vehicle-color', '#15181d')
+  })
+
+  test('a custom colour works for the Campervan too', async ({ page, app }) => {
+    await app.goto()
+    await choose(page, 'iveco-daily')
+    await page.getByTestId('vehicle-color-custom').fill('#7a1010')
+    await expect.poll(() => tripVehicle(app)).toEqual({ kind: 'iveco-daily', color: '#7a1010' })
+    await expect(page.locator('.vehicle-swatch--custom')).toHaveAttribute('data-checked', 'true')
   })
 })
 
@@ -566,6 +687,153 @@ test.describe('on the road and off it', () => {
       expect(box.width).toBeCloseTo(56, 0)
       expect(box.height).toBeCloseTo(35, 0)
       await page.getByTestId('ride-close').click()
+    }
+  })
+})
+
+test.describe('the long Campervan', () => {
+  test('its picture is wider than the others at the same scale, and the cards hold it', async ({ page, app }) => {
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 780 }]) {
+      await page.setViewportSize(viewport)
+      await app.goto()
+      await openPicker(page)
+      const art = (kind: string) => option(page, kind).locator('svg')
+      const [long, bus, car] = await Promise.all([art('iveco-daily').boundingBox(), art('retro-bus').boundingBox(), art('campervan').boundingBox()])
+      // 78 units against 64, one height for all.
+      expect(long!.width / bus!.width).toBeCloseTo(78 / 64, 2)
+      expect(long!.height).toBeCloseTo(bus!.height, 0)
+      expect(car!.width).toBeCloseTo(bus!.width, 0)
+      // Inside its card.
+      const card = (await option(page, 'iveco-daily').boundingBox())!
+      expect(long!.x).toBeGreaterThanOrEqual(card.x)
+      expect(long!.x + long!.width).toBeLessThanOrEqual(card.x + card.width)
+      await page.keyboard.press('Escape')
+    }
+  })
+
+  test('on the ride it is centred on the marker, at the standard scale, and flips about its middle', async ({ page, app }) => {
+    await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
+    await choose(page, 'iveco-daily')
+    await page.keyboard.press('Escape')
+    await rideAt(page, app, 0.6 + 1.2)
+    const marker = (await van(page).boundingBox())!
+    expect(marker.width).toBeCloseTo(56, 0)
+    expect(marker.height).toBeCloseTo(35, 0)
+    const art = (await van(page).locator('svg.ride-art').boundingBox())!
+    expect(art.width).toBeCloseTo((78 * 56) / 64, 0)
+    expect(art.height).toBeCloseTo(35, 0)
+    expect(art.x + art.width / 2).toBeCloseTo(marker.x + marker.width / 2, 0)
+    await page.getByTestId('ride-close').click()
+  })
+
+  test('going west the same box is mirrored in place', async ({ page, app }) => {
+    await openTrip(page, app, 'Zurich', 'Annecy')
+    await choose(page, 'iveco-daily')
+    await page.keyboard.press('Escape')
+    await rideAt(page, app, 0.6 + 1.2)
+    await expect(van(page)).toHaveAttribute('data-facing', 'west')
+    await expect.poll(() => van(page).evaluate((el) => getComputedStyle(el).transform)).toMatch(/^matrix\(-1, 0, 0, 1,/)
+    const marker = (await van(page).boundingBox())!
+    const art = (await van(page).locator('svg.ride-art').boundingBox())!
+    expect(art.width).toBeCloseTo((78 * 56) / 64, 0)
+    expect(art.x + art.width / 2).toBeCloseTo(marker.x + marker.width / 2, 0)
+  })
+
+  test('the marker starts out with the trip\'s own vehicle, not the default one', async ({ page, app }) => {
+    await openTrip(page, app, 'Lyon', 'Annecy')
+    await choose(page, 'iveco-daily')
+    await swatch(page, '#d4382c').click()
+    await page.keyboard.press('Escape')
+    await rideButton(page).click()
+    await expect(page.getByTestId('ride-hud')).toBeVisible()
+    await expect(van(page)).toHaveAttribute('data-vehicle-kind', 'iveco-daily')
+    await expect(van(page)).toHaveAttribute('data-vehicle-color', '#d4382c')
+  })
+})
+
+test.describe('on a real canvas (what the image and video exports draw with)', () => {
+  test('a black campervan on a dark tile gets its halo by itself, a light one does not, and the long van is centred and wider', async ({ page, app }) => {
+    await app.goto()
+    const result = await page.evaluate(async () => {
+      const url = '/src/features/ride/vehicles.ts'
+      const { drawVehicle } = (await import(/* @vite-ignore */ url)) as typeof import('../src/features/ride/vehicles')
+      const [W, H, X, Y] = [300, 140, 150, 90]
+      const bg = [22, 27, 36]
+      type Vehicle = Parameters<typeof drawVehicle>[1]
+      const paint = (vehicle: Vehicle, facing: 'east' | 'west', halo?: boolean): Uint8ClampedArray => {
+        const canvas = document.createElement('canvas')
+        canvas.width = W
+        canvas.height = H
+        const ctx = canvas.getContext('2d')!
+        ctx.fillStyle = `rgb(${bg.join(',')})`
+        ctx.fillRect(0, 0, W, H)
+        drawVehicle(ctx, vehicle, X, Y, facing, 56, halo === undefined ? {} : { halo })
+        return ctx.getImageData(0, 0, W, H).data
+      }
+      const isInk = (d: Uint8ClampedArray, i: number) => Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 24
+      /** Pixels that are lit only in `lit`: bright, and background in `plain`. */
+      const glow = (lit: Uint8ClampedArray, plain: Uint8ClampedArray) => {
+        let count = 0
+        let brightest = 0
+        for (let i = 0; i < lit.length; i += 4) {
+          if (isInk(plain, i) || !isInk(lit, i)) continue
+          count++
+          brightest = Math.max(brightest, (lit[i] + lit[i + 1] + lit[i + 2]) / 3)
+        }
+        return { count, brightest }
+      }
+      const same = (a: Uint8ClampedArray, b: Uint8ClampedArray) => a.every((v, i) => v === b[i])
+      const bounds = (d: Uint8ClampedArray) => {
+        let [left, right, top, bottom] = [W, 0, H, 0]
+        for (let i = 0; i < d.length; i += 4) {
+          if (!isInk(d, i)) continue
+          const [x, y] = [(i / 4) % W, Math.floor(i / 4 / W)]
+          left = Math.min(left, x)
+          right = Math.max(right, x)
+          top = Math.min(top, y)
+          bottom = Math.max(bottom, y)
+        }
+        return { left, right, top, bottom }
+      }
+
+      const black = { kind: 'iveco-daily' } as const
+      const navy = { kind: 'iveco-daily', color: '#1a2a6c' } as const
+      const red = { kind: 'iveco-daily', color: '#d4382c' } as const
+      return {
+        blackAuto: glow(paint(black, 'east'), paint(black, 'east', false)),
+        blackOff: glow(paint(black, 'east', false), paint(black, 'east', false)),
+        carAutoIsPlain: same(paint(undefined, 'east'), paint(undefined, 'east', false)),
+        carForced: glow(paint(undefined, 'east', true), paint(undefined, 'east', false)),
+        navy: glow(paint(navy, 'east'), paint(navy, 'east', false)),
+        redIsPlain: same(paint(red, 'east'), paint(red, 'east', false)),
+        van: bounds(paint(black, 'east', false)),
+        vanWest: bounds(paint(black, 'west', false)),
+        car: bounds(paint(undefined, 'east', false)),
+        anchor: { x: X, y: Y },
+      }
+    })
+
+    // The glow is there (hundreds of bright pixels round the outline) for the black van, and for a dark navy one, though nobody asked.
+    expect(result.blackAuto.count).toBeGreaterThan(150)
+    expect(result.blackAuto.brightest).toBeGreaterThan(90)
+    expect(result.navy.count).toBeGreaterThan(150)
+    // Not for the white car or a red van; asking for it still works; asking for none gives none.
+    expect(result.carAutoIsPlain).toBe(true)
+    expect(result.redIsPlain).toBe(true)
+    expect(result.carForced.count).toBeGreaterThan(150)
+    expect(result.blackOff.count).toBe(0)
+
+    // The long van is wider than the car at the same scale, centred on its anchor (also mirrored), and stands on the anchor's line.
+    const width = (b: { left: number; right: number }) => b.right - b.left + 1
+    expect(width(result.van)).toBeGreaterThan(width(result.car) * 1.2)
+    expect(width(result.van)).toBeLessThanOrEqual((78 * 56) / 64 + 1)
+    for (const b of [result.van, result.vanWest]) {
+      expect((b.left + b.right) / 2).toBeGreaterThan(result.anchor.x - 2.5)
+      expect((b.left + b.right) / 2).toBeLessThan(result.anchor.x + 2.5)
+    }
+    for (const b of [result.van, result.car]) {
+      expect(b.bottom).toBeGreaterThanOrEqual(result.anchor.y + 4)
+      expect(b.bottom).toBeLessThanOrEqual(result.anchor.y + 7)
     }
   })
 })
