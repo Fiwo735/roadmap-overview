@@ -3,6 +3,8 @@ import { decodePolylineUncached, encodePolyline } from '../lib/polyline'
 import { isAbortError } from '../lib/requestQueue'
 import type { LatLng } from '../types/trip'
 import doverCalais from '../lib/fixtures/osrm-dover-calais.json'
+import viaSpur from '../lib/fixtures/osrm-via-spur.json'
+import { pathLengthM } from '../lib/geo'
 import { createOsrmClient, OsrmError } from './osrm'
 
 const lyon = { lat: 45.7578, lng: 4.832 }
@@ -64,6 +66,52 @@ describe('routeDrive', () => {
     expect(points[0].lat).toBeCloseTo(lyon.lat, 4)
     expect(points.at(-1)!.lng).toBeCloseTo(annecy.lng, 4)
     expect(route.geometry.length).toBeLessThan(encodePolyline(dense).length / 4)
+  })
+
+  describe('out-and-back stubs at via points', () => {
+    // A real answer, cut to the stretch where the route drives into a dead end (the via point snapped
+    // there) and straight back out: 349 m each way.
+    const path = decodePolylineUncached(viaSpur.geometry)
+    const start = path[0]
+    const end = path[path.length - 1]
+    const body = (waypoints: unknown) => ({
+      code: 'Ok',
+      routes: [{ geometry: viaSpur.geometry, distance: 20_000, duration: 1_200, legs: [] }],
+      waypoints,
+    })
+    const located = (p: LatLng) => ({ location: [p.lng, p.lat], distance: 31, name: '' })
+
+    it('cuts the stub out of the geometry and takes it out of the distance and time', async () => {
+      const fetch = vi.fn(() => answer(body([located(start), located(viaSpur.via), located(end)])))
+      const { routeDrive } = createOsrmClient({ fetch: asFetch(fetch), simplifyToleranceM: 1 })
+      const route = await routeDrive([start, { lat: viaSpur.via.lat + 0.0004, lng: viaSpur.via.lng + 0.0006 }, end])
+      const cut = decodePolylineUncached(route.geometry)
+      expect(pathLengthM(cut)).toBeLessThan(pathLengthM(path) - 600)
+      expect(route.distanceM).toBeGreaterThan(19_270)
+      expect(route.distanceM).toBeLessThan(19_340)
+      expect(route.durationS).toBeCloseTo((1_200 * route.distanceM) / 20_000, 6)
+      expect(cut[0]).toEqual(path[0])
+      expect(cut.at(-1)).toEqual(path.at(-1))
+    })
+
+    it('leaves the route as the router drew it when the answer has no usable waypoints, or none at the via point', async () => {
+      for (const waypoints of [undefined, [], [located(start), located(end)], [located(start), { location: 'x' }, located(end)]]) {
+        const { routeDrive } = createOsrmClient({ fetch: asFetch(vi.fn(() => answer(body(waypoints)))), simplifyToleranceM: 1 })
+        const route = await routeDrive([start, viaSpur.via, end])
+        expect(route.distanceM).toBe(20_000)
+        expect(route.durationS).toBe(1_200)
+        expect(pathLengthM(decodePolylineUncached(route.geometry))).toBeGreaterThan(pathLengthM(path) - 5)
+      }
+    })
+
+    it('never touches the two ends of the route: a dead-end destination keeps its road', async () => {
+      // The same stub, but now the router says the *last* point was snapped onto its tip.
+      const fetch = vi.fn(() => answer(body([located(start), located(end), located(viaSpur.via)])))
+      const { routeDrive } = createOsrmClient({ fetch: asFetch(fetch), simplifyToleranceM: 1 })
+      const route = await routeDrive([start, end, viaSpur.via])
+      expect(route.distanceM).toBe(20_000)
+      expect(pathLengthM(decodePolylineUncached(route.geometry))).toBeGreaterThan(pathLengthM(path) - 5)
+    })
   })
 
   describe('ferry crossings (steps)', () => {

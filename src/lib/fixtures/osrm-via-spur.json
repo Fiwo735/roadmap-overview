@@ -1,0 +1,8 @@
+{
+  "about": "Real router.project-osrm.org answer (driving, overview=full, polyline5), cut to the stretch around a via point snapped onto a dead-end road: the route drives 349 m in and the same 349 m back. Via = the waypoint location OSRM returned.",
+  "via": {
+    "lat": 45.597889,
+    "lng": 5.277634
+  },
+  "geometry": "yniuGcgd_@TaBNeAVqBNaAN}@Ji@FQb@gAFIf@k@LSLKLKZQf@]Xa@p@m@LCLIJWBU@KBCBE?G@EAGAEACACCYCEFa@x@uCTILGJMXq@BQDO@KLcAPk@Pe@JUXo@@QBS@qA??ApACRAPYn@KTQd@Qj@MbAAJENCPYp@KLMFUHy@tCG`@GNELCDCFAF?H@DBB@DDBD?D?BCBCBE?GL?L?bAd@FD@BJ?HBL?@JBHFDH?FGBG?I?I\\KzCy@FATGh@MzBi@vA]LE"
+}

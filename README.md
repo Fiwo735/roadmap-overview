@@ -40,8 +40,11 @@ Try it with the bundled sample trip: **File → Load sample trip**.
 ### Routes
 
 - Legs between places are **routed over roads** ([OSRM](https://project-osrm.org/)) and cached, so undo, redo and re-ordering are instant.
-- **Reshape a route** by dragging the line: it bends through the point you drop (a *via point*). Drag a via point to move it,
-  double-click or right-click it to remove it. *Reset shape* in the leg editor removes them all.
+- **Reshape a route** by dragging the line: it bends through the point you drop (a *via point*). The line stays plain: the round
+  handle of a via point only shows while the pointer is over the leg's line (or the handle), while you drag, or when a handle has keyboard
+  focus; on a touch screen the selected leg shows them. Drag a handle to move its via point, double-click or right-click it to remove
+  it. *Reset shape* in the leg editor removes them all. A via point that lands on a dead-end side road does not leave a stub in the line
+  (the short out-and-back is cut out, up to 1 km each way).
 - **Custom legs.** Click the connector between two places to open the leg editor: switch the leg to **Ferry**, **Train** or **Flight**
   (drawn by hand, flights as great-circle arcs, with a time estimate), turn off **Follow roads** for a straight drive, set the travel
   time yourself and give the leg a label. Car ferries inside a driven route are detected automatically.

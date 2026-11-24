@@ -83,23 +83,45 @@ export function distanceToPathM(point: LatLng, path: readonly LatLng[]): number 
 }
 
 /**
+ * Where each via point of a leg lies along the leg's geometry: the nearest point of the line, in
+ * order (each one never earlier than the one before, so routes that double back stay correct).
+ * Empty for an empty path.
+ */
+export function viaPositionsOnPath(path: readonly LatLng[], via: readonly LatLng[]): PathProjection[] {
+  const positions: PathProjection[] = []
+  let from = 0
+  for (const v of via) {
+    const located = nearestOnPath(v, path, { fromAlongM: from })
+    if (!located) break
+    positions.push(located)
+    from = located.alongM
+  }
+  return positions
+}
+
+/** A via point this close to the line counts as on it: it is left exactly where it is stored. */
+const ON_LINE_M = 1
+
+/**
+ * The spot of the line each via point is drawn at: the via point itself when the router took the line
+ * right through it, else (it snapped the point to a road, or a stub was cut out of the route) the
+ * nearest point of the line, so a handle always sits on the line it belongs to.
+ */
+export function viaAnchorsOnPath(path: readonly LatLng[], via: readonly LatLng[]): LatLng[] {
+  const positions = viaPositionsOnPath(path, via)
+  return via.map((v, i) => (positions[i] && positions[i].distanceM > ON_LINE_M ? positions[i].point : v))
+}
+
+/**
  * Where a point the user grabbed on a leg's line becomes a via point: the index into the leg's
  * existing `via` list (0 … via.length). `path` is the leg's current geometry, which passes through
- * the existing via points in order; each of them is located along it (never earlier than the one
- * before) and the new point goes after those that lie before it.
+ * the existing via points in order; each of them is located along it and the new point goes after
+ * those that lie before it.
  */
 export function viaInsertIndex(path: readonly LatLng[], via: readonly LatLng[], point: LatLng): number {
   const target = nearestOnPath(point, path)
   if (!target) return via.length
-  let index = 0
-  let from = 0
-  for (const v of via) {
-    const located = nearestOnPath(v, path, { fromAlongM: from })
-    if (!located || located.alongM > target.alongM) break
-    from = located.alongM
-    index++
-  }
-  return index
+  return viaPositionsOnPath(path, via).filter((located) => located.alongM <= target.alongM).length
 }
 
 /**

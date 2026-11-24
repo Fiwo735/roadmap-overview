@@ -8,6 +8,27 @@
   cursor: grab;
 }
 
+/* Invisible by default: a reshaped route should look like a plain line. The handles stay in the DOM
+ * (focusable, grabbable) and fade in while the leg is being worked on (viaReveal.ts puts
+ * `is-revealed` on them); they fade out a moment after the pointer has left. */
+.via-point:not(.via-point--ghost) {
+  opacity: 0;
+  transition: opacity 180ms var(--ease) 140ms;
+}
+
+.via-point.is-revealed,
+.via-point.leaflet-drag-target {
+  opacity: 1;
+  transition-delay: 0s;
+}
+
+/* Without hover (a touch screen) an unrevealed handle is not there to be touched either. */
+@media (hover: none) {
+  .via-point:not(.via-point--ghost):not(.is-revealed) {
+    pointer-events: none;
+  }
+}
+
 /* A larger invisible target than the 16 px disc: easier to grab, still fine on a line. */
 .via-point::after {
   content: '';

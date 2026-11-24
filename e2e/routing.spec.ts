@@ -364,7 +364,11 @@ test.describe('reshaping the route', () => {
     const [old] = (await app.trip()).legs[0].via
 
     const handle = await center(viaPoints(page).first())
-    await page.mouse.move(handle.x, handle.y)
+    // The pointer still rests where the point was dropped, and the new handle stays hidden (no tooltip)
+    // until the pointer has been away: leave, then come back onto it.
+    await page.mouse.move(handle.x + 120, handle.y + 120, { steps: 4 })
+    await page.mouse.move(handle.x + 20, handle.y + 20, { steps: 2 })
+    await page.mouse.move(handle.x, handle.y, { steps: 3 })
     await expect(page.locator('.via-tooltip')).toHaveText('Drag to change route · double-click to remove')
     await page.mouse.down()
     await page.mouse.move(handle.x + 40, handle.y - 10, { steps: 4 })

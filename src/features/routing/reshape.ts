@@ -65,6 +65,13 @@ export function viaIcon(color: string, ghost = false) {
   })
 }
 
+/** Told when a drag out of a line starts and ends, so the leg's via handles can show meanwhile. */
+export interface ReshapeDragEvents {
+  start: (legId: string) => void
+  /** `dropped`: the drag added a via point (false: it was cancelled). */
+  end: (legId: string, dropped: boolean) => void
+}
+
 export interface Reshaper {
   /** Pointer is over a leg's line (mouseover or mousemove): show the handle at the nearest point. */
   hover: (legId: string, e: LeafletMouseEvent) => void
@@ -109,6 +116,7 @@ export function createReshaper(
   map: LeafletMap,
   getLeg: (legId: string) => LegRouteInfo | undefined,
   isMouse: () => boolean,
+  onDrag: ReshapeDragEvents,
 ): Reshaper {
   const container = map.getContainer()
   const handle: Marker = leafletMarker([0, 0], {
@@ -178,6 +186,7 @@ export function createReshaper(
       if (Math.hypot(e.clientX - drag.startClient.x, e.clientY - drag.startClient.y) < DRAG_THRESHOLD_PX) return
       drag.moved = true
       container.classList.add('is-reshaping')
+      onDrag.start(drag.legId)
     }
     const info = getLeg(drag.legId)
     if (!info) return finish(false, e)
@@ -221,10 +230,11 @@ export function createReshaper(
     if (!moved) return
     swallowNextClick(!drop)
     const info = getLeg(legId)
-    if (!drop || !e || !info || !isOverMap(map, clientPointOf(e))) return
+    if (!drop || !e || !info || !isOverMap(map, clientPointOf(e))) return onDrag.end(legId, false)
     const index = viaInsertIndex(info.coords, info.leg.via, point)
     useTripStore.getState().addVia(legId, index, cleanLatLng(clientToLatLng(e)))
     useUiStore.getState().selectLeg(legId)
+    onDrag.end(legId, true)
   }
 
   /** Capture phase on the map container: runs before Leaflet's own mousedown handlers. */

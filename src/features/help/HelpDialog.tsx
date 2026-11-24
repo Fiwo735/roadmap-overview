@@ -23,7 +23,7 @@ const TOPICS: { id: string; title: string; items: string[] }[] = [
     id: 'routes',
     title: 'Shape the route',
     items: [
-      'Drive legs follow the roads. Drag the line anywhere to bend it through a point (a “via point”), the way you would in Google Maps; double-click or right-click a via point to remove it.',
+      'Drive legs follow the roads. Drag the line anywhere to bend it through a point (a “via point”), the way you would in Google Maps; the via point only shows as a round handle while you point at the line, so the route stays clean; double-click or right-click the handle to remove it.',
       'Click the connector between two places to open its leg editor: switch to a ferry, train or flight leg (hand-drawn, with a time estimate), turn off “Follow roads” for a straight line, set the travel time or label it, or reset the shape.',
     ],
   },

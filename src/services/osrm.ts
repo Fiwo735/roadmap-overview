@@ -3,6 +3,7 @@ import { createRequestQueue } from '../lib/requestQueue'
 import { simplifyPath } from '../lib/simplify'
 import { haversineM, isValidLatLng, pathLengthM } from '../lib/geo'
 import { simplifyWithSpans, spansFromSteps, type OsrmStepInput } from '../lib/routeSpans'
+import { trimViaSpurs } from '../lib/viaSpurs'
 import type { LatLng, RouteSpan } from '../types/trip'
 import { OSRM_URL } from './config'
 
@@ -133,6 +134,7 @@ export function createOsrmClient({
         const answer = (typeof body === 'object' && body !== null ? body : {}) as {
           code?: unknown
           routes?: Array<{ geometry?: unknown; distance?: unknown; duration?: unknown; legs?: unknown }>
+          waypoints?: unknown
         }
         if (status >= 500) throw new OsrmError('http', `The routing service answered ${status}`, { status })
         if (typeof answer.code === 'string' && answer.code !== 'Ok') {
@@ -162,21 +164,39 @@ export function createOsrmClient({
           throw new OsrmError('http', 'The routing service sent an unreadable route', { status })
         }
         const spanned = spannedRoute(path, route.legs)
-        if (spanned) {
-          const { path: simplified, spans } = simplifyWithSpans(spanned.path, spanned.spans, simplifyToleranceM)
-          return { geometry: encodePolyline(simplified), distanceM: route.distance, durationS: route.duration, spans }
+        // A via point snapped onto a dead end makes the route drive in and straight back out: cut that stub.
+        const trimmed = trimViaSpurs(spanned?.path ?? path, snappedVias(answer.waypoints, points.length), spanned?.spans)
+        // The metrics follow the geometry: what was cut out is neither driven nor timed.
+        const cut = trimmed.removedM > 0 && route.distance > trimmed.removedM
+        const distanceM = cut ? route.distance - trimmed.removedM : route.distance
+        const durationS = cut ? (route.duration * distanceM) / route.distance : route.duration
+        if (trimmed.spans) {
+          const { path: simplified, spans } = simplifyWithSpans(trimmed.path, trimmed.spans, simplifyToleranceM)
+          return { geometry: encodePolyline(simplified), distanceM, durationS, spans }
         }
-        return {
-          geometry: encodePolyline(simplifyPath(path, simplifyToleranceM)),
-          distanceM: route.distance,
-          durationS: route.duration,
-        }
+        return { geometry: encodePolyline(simplifyPath(trimmed.path, simplifyToleranceM)), distanceM, durationS }
       },
       { signal, key: url, priority },
     )
   }
 
   return { routeDrive }
+}
+
+/**
+ * Where the router snapped the via points (waypoints 1 … n-2 of an n-point request), or none when the
+ * answer does not say. The route's own two ends are left out on purpose: see `trimViaSpurs`.
+ */
+function snappedVias(waypoints: unknown, requested: number): LatLng[] {
+  if (!Array.isArray(waypoints) || waypoints.length !== requested) return []
+  const vias: LatLng[] = []
+  for (const waypoint of waypoints.slice(1, -1)) {
+    const location = typeof waypoint === 'object' && waypoint !== null ? (waypoint as { location?: unknown }).location : undefined
+    const [lng, lat] = Array.isArray(location) ? location : []
+    const snapped = { lat, lng }
+    if (isValidLatLng(snapped)) vias.push(snapped)
+  }
+  return vias
 }
 
 /**

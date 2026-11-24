@@ -146,8 +146,9 @@
   margin-bottom: var(--space-3);
 }
 
-/* ---- Presentation mode (F8): the route-shaping handles are an editing tool --------------------- */
+/* ---- Presentation mode (F8) and the ride: the route-shaping handles are an editing tool ------- */
 
-.leaflet-container.is-presenting .leaflet-ro-via-pane {
+.leaflet-container.is-presenting .leaflet-ro-via-pane,
+.leaflet-container.ride-active .leaflet-ro-via-pane {
   display: none;
 }

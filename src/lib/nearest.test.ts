@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { haversineM, pathLengthM } from './geo'
-import { distanceToPathM, insertIndexNear, nearestOnPath, viaInsertIndex } from './nearest'
+import { distanceToPathM, insertIndexNear, nearestOnPath, viaAnchorsOnPath, viaInsertIndex } from './nearest'
 
 describe('distanceToPathM', () => {
   it('measures to the nearest point of a segment, clamped to its ends', () => {
@@ -190,5 +190,41 @@ describe('viaInsertIndex', () => {
 
   it('appends when the path is empty', () => {
     expect(viaInsertIndex([], [{ lat: 0, lng: 0 }], { lat: 1, lng: 1 })).toBe(1)
+  })
+})
+
+describe('viaAnchorsOnPath', () => {
+  const path = [
+    { lat: 0, lng: 0 },
+    { lat: 0, lng: 0.05 },
+    { lat: 0, lng: 0.1 },
+  ]
+
+  it('leaves a via point that the line runs through exactly where it is stored', () => {
+    const via = [{ lat: 0, lng: 0.05 }]
+    expect(viaAnchorsOnPath(path, via)).toEqual(via)
+  })
+
+  it('moves a via point that is off the line onto its nearest point', () => {
+    // 200 m north of the line: the router snapped it to the road.
+    const off = { lat: 0.0018, lng: 0.04 }
+    const [anchor] = viaAnchorsOnPath(path, [off])
+    expect(anchor.lat).toBeCloseTo(0, 6)
+    expect(anchor.lng).toBeCloseTo(0.04, 5)
+  })
+
+  it('never places a via point before the one listed ahead of it', () => {
+    // The second one lies back near the start in the plane, but follows the first along the route.
+    const anchors = viaAnchorsOnPath(path, [
+      { lat: 0, lng: 0.08 },
+      { lat: 0.0018, lng: 0.02 },
+    ])
+    expect(anchors[0]).toEqual({ lat: 0, lng: 0.08 })
+    expect(anchors[1].lng).toBeCloseTo(0.08, 5)
+  })
+
+  it('returns the stored points for an empty path', () => {
+    const via = [{ lat: 1, lng: 2 }]
+    expect(viaAnchorsOnPath([], via)).toEqual(via)
   })
 })

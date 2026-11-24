@@ -57,7 +57,7 @@ src/
                              id, trip (defaults, day rules, syncLegs), tripFile (parse/serialize),
                              routeKey, modes, vehicles (kinds, names, colours, `parseVehicle`), geoResult (Nominatim result → GeoResult, short name),
                              requestQueue (politeness queue), lru, nearest (point-to-path projection,
-                             insert index, via-point index), simplify (Douglas–Peucker),
+                             insert index, via-point index and anchors), simplify (Douglas–Peucker), viaSpurs (dead-end stubs at via points),
                              manualRoute (routes that need no router), greatCircle (flight arcs),
                              routeSpans (ferry stretches from OSRM steps), legModes / legBadges (legend and badge placement),
                              shareLink (`#trip=` links, the `present` flag), tripFileIo (file names, pretty JSON, text → TripFile),
@@ -173,7 +173,7 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 | Service | Use | Rules we follow |
 | --- | --- | --- |
 | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution on the live map (Leaflet's control); on an exported image a credit either drawn in it or posted beside it with the copyright URL (F12); tiles are downloaded with `fetch` in CORS mode (`services/seaTiles.ts`, F9: the pixels are read to hide the borders on the sea, and the canvas stays readable for the export), one request per tile, no bulk prefetching, a tile nobody wants any more (it left the view) is aborted, processed tiles are kept in memory (160, an LRU) so a tile seen again is not downloaded or processed again. The image export (`services/tiles.ts`) only fetches when the user opens the dialog or presses a button, at most 300 tiles per image (the tile zoom is lowered to stay within it; the preview is drawn small, ≈ 20 tiles), **≤ 6 downloads in flight in total** across all renders (a tile of an abandoned preview still on its way counts), one download per URL however many renders want it, requests still queued when their render is abandoned are dropped, tiles kept in memory (220) so redrawing costs no request, and a failed tile is not asked for again for 30 s by previews (an explicit Download / Copy does retry them). |
-| `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=true&alternatives=false` (the steps only tell where a route takes a ferry, see F3); one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; geometry simplified (12 m) before caching. |
+| `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=true&alternatives=false` (the steps only tell where a route takes a ferry, see F3); one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; out-and-back stubs at via points cut out, then the geometry simplified (12 m) before caching (F10). |
 | A trip file URL the user gives as `?src=…` (and the bundled `samples/…` on this site) | Opening a trip someone published, e.g. a gist | GET only (`services/tripSource.ts`), http(s) only, no credentials or referrer, 20 s timeout, 20 MB cap; the other server has to allow cross-origin reads (CORS). |
 | `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
 
@@ -443,7 +443,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   other click). The leg is selected when a drop commits, not when the drag starts. Via points are
   draggable markers (preview while dragging, one `moveVia` on drop; released outside the map they
   snap back); double-click, right-click or Delete on a focused one removes it; tooltip "Drag to
-  change route · double-click to remove". Undo/redo hit the route cache: no request.
+  change route · double-click to remove" (the handles are invisible until revealed since F10). Undo/redo hit the route cache: no request.
 - **Previous line kept while re-routing**: a leg that was routed before and whose key changes keeps
   drawing its last routed geometry (faded, `stale` in `legStyle`) until the new route arrives; a
   failure replaces it with the red line at once, and the grey straight placeholder is only for legs
@@ -1099,6 +1099,49 @@ exported image (one path for both, so a later video export gets it too). The til
   area; a tunnel is cut by about 6 px where a boundary crosses it; a tile server with another water colour (another style) hides nothing;
   Firefox with fingerprinting protection returns noisy canvas pixels, so tiles there are shown unprocessed or slightly noisy; the live
   map's first tiles arrive one worker round trip later than an `<img>` would (a few ms).
+
+### F10 — clean reshaped routes: invisible via handles, no stubs at via points
+
+- **Handles hidden by default** (`routing/viaReveal.ts`, `routing.css`, `RouteLayer.tsx`). The via markers stay in the DOM (focusable,
+  grabbable) at `opacity: 0`; the framework-free `createViaReveal` decides per leg when they get the class `is-revealed` (fade in at once,
+  fade out after a 140 ms grace): the (mouse/pen) pointer is over the leg's line (`route-hit`) or one of its handles, a reshape drag is in
+  progress (new via point out of the line or an existing handle), a handle has keyboard focus (`:focus-visible`, which reveals the whole
+  leg), or — only when there is no hover (`(hover: none)` or the last pointer on the map was a finger) — the leg is the selected one.
+  Selecting a leg (connector, click, the automatic selection after a drop) shows nothing with a mouse. **After a drop the leg rests**: the
+  new handle appears under the pointer, but stays hidden until the pointer has left the leg once (`dragEnd(legId, dropped)`), and its
+  tooltip is closed while it is invisible, and an unrevealed handle takes no part: a double-click on it removes nothing, a right-click is
+  forwarded to the map's own menu (as on the line), a click selects the leg (as on the line). On touch the unrevealed handles also get `pointer-events: none`. Presentation mode and the
+  ride hide the whole via pane (`display: none` under `.is-presenting` / `.ride-active`, `map.css`); the image export never drew them.
+  `createReshaper` takes a 4th argument, `{ start, end }`, called when a line drag begins and ends.
+- **Handles sit on the line** (`viaAnchorsOnPath` in `lib/nearest.ts`, `syncVias`): a via point the router did not run exactly through
+  (it snaps to a road, or a stub was cut out) is drawn at the nearest point of the routed line — otherwise an invisible handle 80 m
+  beside the road could not be found by pointing at the line. The stored via point is untouched (undo, the route key and the file keep
+  it), and it stays where it was dropped while the leg re-routes. `viaPositionsOnPath` is shared with `viaInsertIndex`. The handle's
+  key/focus listeners are re-bound when the icon is replaced (a leg switching mode used to lose its Delete key), the keyboard focus
+  moves to the new element, and after every sync a leg whose focused handle is gone (removed with Delete, replaced) stops counting as
+  focused — browsers do not always send `blur` for a removed element.
+- **Smooth line at via points** (`lib/viaSpurs.ts`, called by `services/osrm.ts`). Measured on the real demo server, Lyon → Annecy
+  (140.3 km) with one via point dropped beside the A43 (8 requests): 20 m off the road: route unchanged; **80 m off: the point snapped
+  31 m away onto a dead-end road and the route drove 349 m in and the same 349 m back out** (+4.2 km, +12 min: a stub on the map);
+  400 m off: a U-shaped turn 80 m wide between two different roads (real roads, nothing runs back over itself: left alone); 1 500 m off:
+  only roundabout loops. `continue_straight=true` returned the identical routes, so the demo server already forbids U-turns at
+  waypoints and the parameter is not sent. `trimViaSpurs(path, snappedVias, spans?)` finds, for each *interior* waypoint (the
+  `waypoints[i].location` OSRM answers with; the route's own two ends are never touched, so a dead-end destination keeps its road), a
+  vertex within 40 m of it where the path turns back (≥ 150° over 8 m) and walks the way in backwards while it lies within 4 m of the way
+  back (the same road driven twice; at the junction up to 25 m over 60 m more, which is what a roundabout needs). A stub ≥ 30 m and ≤ 1 km
+  each way is replaced by a straight join where the two ways part; the distance and duration (and the drive span's) shrink by what was cut,
+  proportionally. Spans move to the new indices; a stub with a ferry boundary inside is left alone. Longer stubs (2.7 km of airport
+  access road was seen) are kept: they were driven to on purpose. The route key is intent-only as before; **routes cached before F10 keep
+  their stubs until they are routed again.** The real answer is the unit-test fixture `lib/fixtures/osrm-via-spur.json`.
+- **Tests**: Vitest for `viaSpurs` (synthetic stubs, the real fixture, U-turn between roads, long/short stubs, route start, spans, inputs
+  untouched), the OSRM client (stub cut, metrics follow, missing waypoints, destinations untouched), `viaAnchorsOnPath`, and `createViaReveal`
+  (pointer, drag, rest after a drop, focus, touch selection). `e2e/viaHandles.spec.ts` (mocked): hidden right after a reshape drop with the
+  pointer resting (no tooltip either), shown while on the line / on the handle / dragging, hidden when away, selection and sidebar hover do
+  not show them, drag and double-click still work, Tab focus reveals the leg and Delete removes, presentation mode and the ride never show them,
+  touch emulation (selected leg shows, others hidden and untouchable, touch drag of a handle), and an OSRM answer with a dead-end stub
+  (real fixture through `page.route`): stub cut from the cached route, distance reduced, handle drawn on the line.
+- **Known gaps**: the 1 km limit is a judgement call; U-shaped detours between parallel roads remain; a hybrid laptop shows the selected
+  leg's handles after a touch until the next mouse move on the map; keyboard-only users still cannot add or move via points.
 
 ### F12 — the OpenStreetMap credit on exported images
 
