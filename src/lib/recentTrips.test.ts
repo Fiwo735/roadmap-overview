@@ -141,6 +141,7 @@ describe('describeAge', () => {
   })
 
   it('gives the date after a week', () => {
-    expect(describeAge(Date.UTC(2027, 5, 1, 12), now)).toBe('1 Jun 2027')
+    // The date is shown in the viewer's time zone, so the test builds noon *local* time (noon UTC is already the next day in Auckland).
+    expect(describeAge(new Date(2027, 5, 1, 12).getTime(), now)).toBe('1 Jun 2027')
   })
 })

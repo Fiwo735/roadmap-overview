@@ -93,6 +93,7 @@ src/
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
+.github/workflows/           deploy-pages.yml: build and publish to GitHub Pages (F15)
 ```
 
 Feature slots: the app shell renders a placeholder component for every planned feature. A
@@ -236,6 +237,8 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
   Chromium reaches the internet through the sandbox proxy: launch it with
   `proxy: { server: process.env.HTTPS_PROXY, bypass: 'localhost,127.0.0.1' }`.
 - Several agents may run at once: always pass an explicit, unique port.
+- CI is one workflow, `.github/workflows/deploy-pages.yml` (F15): type check, lint and the unit tests gate a sub-path build that is deployed
+  to GitHub Pages. **Playwright does not run in CI** (it needs the browsers and takes minutes); run `npm run e2e` before pushing.
 
 ## Feature log
 
@@ -983,7 +986,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   `location.pathname`; `?src=` is resolved against the page. `e2e/subpath.spec.ts` guards it (build, files found, no request outside
   the base, flags loaded, sample, share and presentation links, `?src=`).
 - **README.md** (new): what it is, features with how-tos (the Image export section follows F7's dialog), shortcuts, the trip file format,
-  sharing, development, the external services' policies and how to re-point them, hosting incl. a GitHub Pages workflow. Screenshots live in `docs/screenshots/`
+  sharing, development, the external services' policies and how to re-point them, hosting incl. an example GitHub Pages workflow (since F15 the README points to the real one). Screenshots live in `docs/screenshots/`
   (made from the sample trip with real tiles at 1280×800 CSS px, device scale factor 2, then resized to 1600 px and reduced to a
   256-colour palette to stay below 500 kB each); `exported-image.jpg` is a real export of the sample trip (Landscape 1920 × 1080,
   downscaled to 1440 × 810 — made from the merged app, so its card says "34 h 28 min").
@@ -1006,3 +1009,27 @@ Each feature appends a short entry here: what it added, where it lives, anything
   event, not before); two tabs editing the same trip alternately will keep asking each other; presentation mode refits the map when
   toggled, so a hand-made view is not kept; the README screenshots are static and will age with the UI.
 
+### F15 — deployment to GitHub Pages
+
+- **Workflow** `.github/workflows/deploy-pages.yml` ("Deploy to GitHub Pages"): `on: push` and `workflow_dispatch`; the `build` job is
+  gated with `github.ref_name == github.event.repository.default_branch` (no branch name is hard-coded: a push to any other branch, or a
+  manual run from one, skips both jobs). Permissions `contents: read`, `pages: write`, `id-token: write`. **build**: checkout, Node 22 with
+  the npm cache, `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` (Vitest only), `npm run build` with
+  `BASE_PATH=/${{ github.event.repository.name }}/` (so a fork publishes under its own name), a one-line `grep` that `dist/index.html`
+  references `/<repo>/assets/` (fails the job if the base ever stops being applied), then `actions/upload-pages-artifact` with `dist`.
+  **deploy**: `needs: build`, `actions/deploy-pages` in the `github-pages` environment, `url` from the step's `page_url` output; the
+  concurrency group `pages` (`cancel-in-progress: false`: a running deployment is never cancelled half-way, a newer one waits) is on
+  *this job*, not the workflow, so a run whose build is skipped (a push to another branch) can never replace a queued default-branch deployment.
+  Actions used: `actions/checkout@v5`, `actions/setup-node@v5`, `actions/upload-pages-artifact@v4`, `actions/deploy-pages@v4`. They could
+  not be checked against github.com from the build machine; they are versions known to exist, so the first run is the real check
+  (bumping a major later is a one-line change each).
+- **What the user must do once** (the workflow cannot): make the repository public (or use a plan with Pages for private repos) and set
+  Settings → Pages → Source to "GitHub Actions". Documented in the README's "Deployment" section, which replaces the example
+  `pages.yml` that F8's Hosting section carried (it used `branches: [main]`, which is not this repository's default branch).
+- **No app code changed.** The sub-path support is F8's (`BASE_PATH`, `assetUrl`, `e2e/subpath.spec.ts`); F15 re-verified the built site
+  with `BASE_PATH=/roadmap-overview/ npm run build` + `vite preview` (sample trip, flags, share and presentation links, `?src=`, reload,
+  both themes): every request stays under `/roadmap-overview/`, favicon, flags, fonts, scripts and the sample are found, no console
+  errors. The workflow runs exactly the commands a developer runs locally; nothing in it is CI-specific.
+- **Known gaps**: the site is only as good as the default branch (there are no preview deployments for other branches); `npm run e2e` is
+  not part of the pipeline; a user-page repository (`<user>.github.io`) would need `BASE_PATH=/` in the workflow; the main JS chunk
+  (about 640 kB) and the lazy country-boundary chunk (about 770 kB) trigger Vite's size warning, which is expected and harmless.

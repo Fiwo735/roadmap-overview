@@ -9,6 +9,7 @@ pass; a little campervan can *ride* the route day by day; and the trip can be sa
 exported as a picture. Everything runs in the browser: there is no backend and no account, and the trip stays in your browser until you
 save or share it.
 
+**Live site: <https://fiwo735.github.io/roadmap-overview/>** (published from this repository, see [Deployment](#deployment)).
 Try it with the bundled sample trip: **File → Load sample trip**.
 
 ## Contents
@@ -20,6 +21,7 @@ Try it with the bundled sample trip: **File → Load sample trip**.
 - [Development](#development)
 - [External services](#external-services)
 - [Hosting](#hosting)
+- [Deployment](#deployment)
 
 ## Features
 
@@ -229,43 +231,34 @@ BASE_PATH=/<repository>/ npm run build      # or: npm run build -- --base=/<repo
 npx vite preview --base=/<repository>/      # check it locally at http://localhost:4173/<repository>/
 ```
 
-Share links keep the sub-path, and `?src=` addresses are relative to the page. To publish with GitHub Actions: in the repository's
-*Settings → Pages* choose **GitHub Actions** as the source, then add `.github/workflows/pages.yml`:
+Share links keep the sub-path, and `?src=` addresses are relative to the page. For a site served from your own domain's root (or a
+user page, `https://<user>.github.io/`), leave `BASE_PATH` out. This repository publishes itself that way: see [Deployment](#deployment).
 
-```yaml
-name: Pages
-on:
-  push:
-    branches: [main]
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-concurrency:
-  group: pages
-  cancel-in-progress: true
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
-        env:
-          BASE_PATH: /${{ github.event.repository.name }}/
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-      - id: deploy
-        uses: actions/deploy-pages@v4
+## Deployment
+
+The live site, <https://fiwo735.github.io/roadmap-overview/>, is built and published by a GitHub Actions workflow,
+[`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml). On every push to the repository's default branch (and when you
+start it by hand from the *Actions* tab: *Deploy to GitHub Pages → Run workflow*) it:
+
+1. installs the dependencies (`npm ci`, Node 22) and runs the type check, the linter and the unit tests (`npm test`; the Playwright
+   suite is not run in CI);
+2. builds the app with `BASE_PATH=/<repository>/` (the repository name, so the site works under `…github.io/roadmap-overview/`) and checks
+   that the build carries that base;
+3. uploads `dist/` as the Pages artifact and deploys it with the official `actions/deploy-pages` action to the `github-pages` environment.
+
+A failing check stops the deployment, so the live site is always a build that passed them. Other branches are ignored.
+
+**One-time settings** (the workflow cannot change them; do both before the first run):
+
+- **The repository must be public**, or on a GitHub plan that offers Pages for private repositories (GitHub Pro, Team or Enterprise).
+- **Settings → Pages → Build and deployment → Source: GitHub Actions.** Until this is set, the deploy job fails (its log says to ensure GitHub
+  Pages is enabled); set it and re-run the workflow.
+
+The workflow takes the base path from the repository's name, so a fork publishes at `https://<user>.github.io/<fork name>/` without
+changes. Only a *user page* repository (named `<user>.github.io`, served from the root) needs `BASE_PATH` changed to `/`. To check a
+build as GitHub Pages will serve it:
+
+```sh
+BASE_PATH=/roadmap-overview/ npm run build
+BASE_PATH=/roadmap-overview/ npx vite preview     # http://localhost:4173/roadmap-overview/
 ```
-
-For a site served from your own domain's root (or a user page, `https://<user>.github.io/`), leave `BASE_PATH` out.
