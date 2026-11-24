@@ -16,7 +16,7 @@ pass; a little vehicle can *ride* the route day by day; and the trip can be save
 exported as a picture or a video of the ride. Everything runs in the browser: there is no backend and no account, and the trip stays in your browser until you
 save or share it.
 
-**Live site: <https://fiwo735.github.io/roadmap-overview/>** (published from this repository, see [Deployment](#deployment)).
+**Live site: <https://fiwo735.github.io/vanagram/>** (published from this repository, see [Deployment](#deployment)).
 Try it with the bundled sample trip: **File → Load sample trip**.
 
 ## Contents
@@ -319,14 +319,14 @@ user page, `https://<user>.github.io/`), leave `BASE_PATH` out. This repository 
 
 ## Deployment
 
-The live site, <https://fiwo735.github.io/roadmap-overview/>, is built and published by a GitHub Actions workflow,
+The live site, <https://fiwo735.github.io/vanagram/>, is built and published by a GitHub Actions workflow,
 [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml). On every push to the repository's default branch (and when you
 start it by hand from the *Actions* tab: *Deploy to GitHub Pages → Run workflow*) it:
 
 1. installs the dependencies (`npm ci`, Node 22) and runs the type check, the linter and the unit tests (`npm test`; the Playwright
    suite is not run in CI);
 2. asks GitHub Pages for the site's address (`actions/configure-pages`);
-3. builds the app with `BASE_PATH=/<repository>/` (the repository name, so the site works under `…github.io/roadmap-overview/`) and that
+3. builds the app with `BASE_PATH=/<repository>/` (the repository name, so the site works under `…github.io/vanagram/`) and that
    address as `VITE_SITE_URL` (the link preview needs it, see [Name, logo and link previews](#name-logo-and-link-previews)), then checks
    that the build carries the base (and warns, without failing, when the link-preview image is not an absolute URL);
 4. uploads `dist/` as the Pages artifact and deploys it with the official `actions/deploy-pages` action to the `github-pages` environment.
@@ -344,8 +344,8 @@ changes. Only a *user page* repository (named `<user>.github.io`, served from th
 build as GitHub Pages will serve it:
 
 ```sh
-BASE_PATH=/roadmap-overview/ npm run build
-BASE_PATH=/roadmap-overview/ npx vite preview     # http://localhost:4173/roadmap-overview/
+BASE_PATH=/vanagram/ npm run build
+BASE_PATH=/vanagram/ npx vite preview     # http://localhost:4173/vanagram/
 ```
 
 ## Name, logo and link previews
@@ -364,11 +364,11 @@ and the `window.__ROADMAP__` debug hook): renaming those would orphan trips peop
   social networks) want an **absolute** image URL, which only the deployment knows, so give the build the site's address:
 
   ```sh
-  VITE_SITE_URL=https://example.com/roadmap-overview BASE_PATH=/roadmap-overview/ npm run build
+  VITE_SITE_URL=https://example.com/vanagram BASE_PATH=/vanagram/ npm run build
   ```
 
-  With it, `og:image` and `twitter:image` become `https://example.com/roadmap-overview/og-image.png` and `og:url` is added; without it
+  With it, `og:image` and `twitter:image` become `https://example.com/vanagram/og-image.png` and `og:url` is added; without it
   (a local build) they stay paths under the base, which is right for the page itself and wrong only for scrapers. The deploy workflow does
   this by itself: it takes `base_url` from `actions/configure-pages`, which is the address GitHub Pages serves the site at, **the owner's custom
-  domain** once one is set (`https://fiwo735.github.io/roadmap-overview/` redirects to it), so the preview keeps working if the domain
+  domain** once one is set (`https://fiwo735.github.io/vanagram/` redirects to it), so the preview keeps working if the domain
   changes. A value that is not an `http(s)` URL fails the build.

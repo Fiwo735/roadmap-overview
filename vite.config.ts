@@ -7,7 +7,7 @@ import { withSiteUrl } from './tools/sitePreview.ts'
 const FLAGS_DIR = fileURLToPath(new URL('./node_modules/flag-icons/flags/4x3/', import.meta.url))
 
 /**
- * Where the app is served from: `BASE_PATH=/roadmap-overview/ npm run build` for a sub-path (GitHub Pages),
+ * Where the app is served from: `BASE_PATH=/vanagram/ npm run build` for a sub-path (GitHub Pages),
  * `/` otherwise. A leading and a trailing slash are added when missing. (`vite build --base=…` works too.)
  */
 const BASE = `/${(process.env.BASE_PATH ?? '/').replace(/^\/+|\/+$/g, '')}/`.replace(/^\/\/$/, '/')
@@ -45,7 +45,7 @@ function flagIcons(): Plugin {
 
 /**
  * Link previews want an absolute image URL: with `VITE_SITE_URL` (the address the site is served at, e.g.
- * `https://example.com/roadmap-overview`) the `og:image` and `twitter:image` of `index.html` get it, and `og:url` is added;
+ * `https://example.com/vanagram`) the `og:image` and `twitter:image` of `index.html` get it, and `og:url` is added;
  * without it they stay paths under the base. The deploy workflow passes GitHub Pages' `base_url` (README, "Deployment").
  */
 function sitePreview(siteUrl: string | undefined): Plugin {

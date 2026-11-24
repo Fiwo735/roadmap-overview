@@ -5,17 +5,17 @@ import type { BrowserContext, Page } from '@playwright/test'
 import { expect, test } from './fixtures'
 
 /**
- * The app hosted under a sub-path (GitHub Pages: `https://user.github.io/roadmap-overview/`): the production
- * build is made once with `--base=/roadmap-overview/` and served from the test's own page routes, so the
+ * The app hosted under a sub-path (GitHub Pages: `https://user.github.io/vanagram/`): the production
+ * build is made once with `--base=/vanagram/` and served from the test's own page routes, so the
  * dev server (which serves from `/`) is not involved. Everything the page asks for by an absolute path
  * (the flags, the sample trip, the scripts and styles) has to carry the base.
  */
-const BASE = '/roadmap-overview/'
+const BASE = '/vanagram/'
 const OUT_DIR = resolve('node_modules/.cache/e2e-subpath')
 /** A second build, for a deployment that does not know its address (VITE_SITE_URL unset): the link preview keeps a path. */
 const OUT_DIR_PLAIN = resolve('node_modules/.cache/e2e-subpath-plain')
 /** What the deploy workflow passes from `actions/configure-pages` (`base_url`: the site's address, with no trailing slash). */
-const SITE_URL = 'https://example.test/roadmap-overview'
+const SITE_URL = 'https://example.test/vanagram'
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -114,7 +114,7 @@ test('the sample trip, the country flags and the share link all use the sub-path
   await expect(flags.first()).toBeVisible()
   expect(await flags.count()).toBeGreaterThan(1)
   for (const flag of await flags.all()) {
-    expect(await flag.getAttribute('src')).toMatch(/^\/roadmap-overview\/flags\/[a-z]{2}\.svg$/)
+    expect(await flag.getAttribute('src')).toMatch(/^\/vanagram\/flags\/[a-z]{2}\.svg$/)
     await expect.poll(() => flag.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true)
   }
 

@@ -12,7 +12,8 @@ geocoding are called directly from the client.
 still say `roadmap-overview` (or `__ROADMAP__`, `ro-`) and must not be changed to match the name — the trip file / share link format id
 `roadmap-overview/trip` (`TRIP_FILE_FORMAT`, `TripFile.format`), every `localStorage` key `roadmap-overview:*` (trip, theme, recent, corrupt,
 welcome, stats card, image and video options, vehicle), the IndexedDB database `roadmap-overview` (photos), the dev-only `window.__ROADMAP__`
-hook (and its `RoadmapDebug` type), the Leaflet pane names `ro-*`, the package name and the repository / deploy base path `/roadmap-overview/`.
+hook (and its `RoadmapDebug` type), the Leaflet pane names `ro-*` and the package name. The repository itself was renamed to `vanagram` after F17, so the deploy base
+path (the repository name) is now `/vanagram/`; the old `/roadmap-overview/` address no longer serves the app.
 
 ## Stack
 
@@ -272,7 +273,7 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
 - Specs for shared components run against the dev-only `/ui-kit.html` page (`src/dev/UiKit.tsx`).
 - Every test starts as a *returning visitor* (the auto-fixture `returningVisitor` stores the "welcome seen" flag), so the
   first-visit hint (F8) does not sit on the map; `test.use({ welcomeHint: true })` opts in. `e2e/subpath.spec.ts` builds the
-  app with `--base=/roadmap-overview/` into `node_modules/.cache/e2e-subpath` (about 10 s) and serves it through page routes.
+  app with `--base=/vanagram/` into `node_modules/.cache/e2e-subpath` (about 10 s) and serves it through page routes.
 - Visual verification uses real tiles/routing/search through a dev server and screenshots.
   Chromium reaches the internet through the sandbox proxy: launch it with
   `proxy: { server: process.env.HTTPS_PROXY, bypass: 'localhost,127.0.0.1' }`.
