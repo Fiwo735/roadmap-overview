@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
-import { Crosshair, Flag, Pause, Play, RotateCcw, SkipBack, SkipForward, Tent, X } from 'lucide-react'
+import { Clapperboard, Crosshair, Flag, Pause, Play, RotateCcw, SkipBack, SkipForward, Tent, X } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
 import { SegmentedControl } from '../../components/SegmentedControl'
 import { formatDistance } from '../../lib/format'
@@ -8,10 +8,12 @@ import { useTripStore } from '../../store/tripStore'
 import { MODE_ICONS } from '../legs/modeIcons'
 import { isTextEntry } from '../layout/shortcuts'
 import { displayName } from '../places/names'
+import { openExportDialog } from '../export-image/exportTab'
 import {
   beginScrub,
   closeRide,
   endScrub,
+  pauseRide,
   prefersReducedMotion,
   RIDE_SPEEDS,
   restartRide,
@@ -249,6 +251,18 @@ function HudPanel({ timeline }: { timeline: Timeline }) {
             aria-pressed={follow}
             onClick={() => setRideFollow(!follow)}
             data-testid="ride-follow"
+          />
+          <IconButton
+            label="Record video"
+            tooltip="Render this ride as a video"
+            icon={<Clapperboard size={18} />}
+            aria-haspopup="dialog"
+            onClick={(e) => {
+              // The video is made from the trip, not from the playback: pause so the ride is not running behind the dialog.
+              pauseRide()
+              openExportDialog('video', e.currentTarget)
+            }}
+            data-testid="ride-record"
           />
           <IconButton label="Close ride" tooltip="Close (Esc)" icon={<X size={18} />} onClick={() => closeRide()} data-testid="ride-close" />
         </div>

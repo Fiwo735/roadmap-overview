@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { useRouteStore } from '../../store/routeStore'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
+import type { Place } from '../../types/trip'
 import { isPresenting, usePresentationStore } from '../presentation/presentationStore'
 import { getLegRoutes, useLegRoutes, type LegRouteInfo } from '../routing/legRoutes'
 import {
@@ -103,9 +104,11 @@ export function useRideAvailability(): RideAvailability {
 
 // ---- Timeline and samples ----------------------------------------------------------------------
 
-function currentTimeline(): Timeline | null {
-  const { places, startDate } = useTripStore.getState().trip
-  const infos = getLegRoutes()
+/**
+ * The ride's clock for these places and their leg routes (`getLegRoutes()` / `useLegRoutes()`), or null when there is nothing
+ * to ride. The one place the timeline is made from a trip: the ride plays it and the video export (F13) renders the same one.
+ */
+export function timelineFor(places: readonly Place[], infos: readonly LegRouteInfo[], startDate?: string): Timeline | null {
   if (places.length < 2 || infos.length !== places.length - 1) return null
   return buildTimeline({
     places,
@@ -117,6 +120,11 @@ function currentTimeline(): Timeline | null {
     })),
     startDate,
   })
+}
+
+function currentTimeline(): Timeline | null {
+  const { places, startDate } = useTripStore.getState().trip
+  return timelineFor(places, getLegRoutes(), startDate)
 }
 
 let cache: { timeline: Timeline; time: number; sample: RideSample } | null = null

@@ -1,8 +1,8 @@
 import type { PathOptions } from 'leaflet'
 import { legBadgeSpots, type BadgeSpot } from '../../lib/legBadges'
 import { splitSpans } from '../../lib/routeSpans'
-import type { LatLng } from '../../types/trip'
-import type { LegRouteInfo } from '../routing/legRoutes'
+import type { LatLng, LegMode, RouteSpan } from '../../types/trip'
+import type { LegRouteInfo, LegRouteStatus } from '../routing/legRoutes'
 import { legStyle } from '../routing/legStyle'
 
 // Framework-free: what to draw for the legs of the trip, in the styles the live map uses.
@@ -41,6 +41,35 @@ function lineStyle(options: PathOptions): LineStyle {
   }
 }
 
+/** What `planLegParts` needs of a leg: its mode, how it is drawn, how far routing got and the line to draw. */
+export interface LegLine {
+  mode: LegMode
+  /** A drive leg drawn as straight segments. */
+  straight: boolean
+  status: LegRouteStatus
+  coords: readonly LatLng[]
+  /** Ferry stretches inside a routed drive leg. */
+  spans?: readonly RouteSpan[]
+}
+
+/**
+ * The lines of one leg, in the style the live map gives it: the leg's own mode (a leg that is not routed yet is the grey
+ * dashed placeholder and a failed one the red line), plus the ferry crossings inside a routed drive leg in the ferry
+ * style. `selected` is the heavier style a selected leg has, which the ride's trail uses.
+ */
+export function planLegParts({ mode, straight, status, coords, spans }: LegLine, selected = false): LegPart[] {
+  const base = { hovered: false, selected }
+  const own = legStyle({ ...base, mode, straight, status })
+  if (status !== 'ok') return [{ casing: own.casing && lineStyle(own.casing), line: lineStyle(own.line), stretches: [coords.slice()] }]
+  const { main, ferry } = splitSpans(coords, spans)
+  const parts: LegPart[] = [{ casing: own.casing && lineStyle(own.casing), line: lineStyle(own.line), stretches: main }]
+  if (ferry.length > 0) {
+    const crossing = legStyle({ ...base, mode: 'ferry', straight: false, status })
+    parts.push({ casing: crossing.casing && lineStyle(crossing.casing), line: lineStyle(crossing.line), stretches: ferry })
+  }
+  return parts
+}
+
 /**
  * The lines and mode badges of a trip, from the route accessor's output (`getLegRoutes()`): every leg
  * in its mode's style (`legStyle`, as on the map), the ferry crossings inside a routed drive leg in the
@@ -52,21 +81,9 @@ export function planLegs(legs: readonly LegRouteInfo[]): LegsPlan {
   const badges: BadgeSpot[] = []
   for (const info of legs) {
     const { leg, status, coords } = info
-    const base = { hovered: false, selected: false }
-    if (status !== 'ok') {
-      const style = legStyle({ ...base, mode: leg.mode, straight: leg.straight === true, status })
-      parts.push({ casing: style.casing && lineStyle(style.casing), line: lineStyle(style.line), stretches: [coords.slice()] })
-      continue
-    }
     const spans = info.route?.spans
-    const { main, ferry } = splitSpans(coords, spans)
-    const own = legStyle({ ...base, mode: leg.mode, straight: leg.straight === true, status })
-    parts.push({ casing: own.casing && lineStyle(own.casing), line: lineStyle(own.line), stretches: main })
-    if (ferry.length > 0) {
-      const crossing = legStyle({ ...base, mode: 'ferry', straight: false, status })
-      parts.push({ casing: crossing.casing && lineStyle(crossing.casing), line: lineStyle(crossing.line), stretches: ferry })
-    }
-    badges.push(...legBadgeSpots(leg.mode, coords, spans))
+    parts.push(...planLegParts({ mode: leg.mode, straight: leg.straight === true, status, coords, spans }))
+    if (status === 'ok') badges.push(...legBadgeSpots(leg.mode, coords, spans))
   }
   return { parts, badges }
 }

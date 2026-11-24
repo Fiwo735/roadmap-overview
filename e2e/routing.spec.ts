@@ -171,20 +171,30 @@ test.describe('re-routing a changed leg', () => {
 
   test("a user's edit jumps ahead of background routing", async ({ page, app, mocks }) => {
     await app.goto()
+    // The first background request is held in flight (the mock does not answer it) until the edit has been made, so that nothing about the
+    // machine's speed decides which request the queue sends second: it sends one at a time, and picks the next one when the first is answered.
+    let release!: () => void
+    mocks.osrm.gate = new Promise<void>((resolve) => (release = resolve))
     // A freshly opened trip (one replaceTrip, like an import): eight legs, routed one second apart.
     const names = ['Paris', 'Lyon', 'Annecy', 'Zurich', 'Milan', 'Munich', 'Salzburg', 'Vienna', 'Prague']
     await app.setTrip(createTrip({ places: names.map((name, i) => ({ id: `p${i}`, ...placeInput(name), day: i })) }), { clearHistory: true })
-    await expect.poll(() => mocks.osrm.requests.length).toBe(1)
+    await expect.poll(() => mocks.osrm.requests.length).toBeGreaterThanOrEqual(1)
+    expect(mocks.osrm.requests).toHaveLength(1)
     // Reshaping the last leg right away must not wait behind the seven legs still queued.
     const last = (await app.trip()).legs[7].id
     await page.evaluate((id) => window.__ROADMAP__!.trip.getState().addVia(id, 0, { lat: 48.9, lng: 15.9 }), last)
-    await expect.poll(() => mocks.osrm.requests.length, { timeout: 5000 }).toBe(2)
+    await page.waitForTimeout(1500) // longer than the queue's pause between requests: it still must not have sent another while one is in flight
+    expect(mocks.osrm.requests).toHaveLength(1)
+    mocks.osrm.gate = null
+    release()
+    // The request after the first one is the edit, not the next background leg.
+    await expect.poll(() => mocks.osrm.requests.length, { timeout: 10_000 }).toBeGreaterThanOrEqual(2)
     const second = viaCoordsOf(mocks, 1)
     expect(second).toHaveLength(3)
     expect(second[1]).toBe('15.90000,48.90000')
-    await expect(connector(page, 7)).toHaveAttribute('data-status', 'ok', { timeout: 5000 })
+    await expect(connector(page, 7)).toHaveAttribute('data-status', 'ok', { timeout: 10_000 })
     // Background legs go on, still one at a time and a second apart.
-    await expect.poll(() => mocks.osrm.requests.length, { timeout: 5000 }).toBe(3)
+    await expect.poll(() => mocks.osrm.requests.length, { timeout: 10_000 }).toBeGreaterThanOrEqual(3)
     const gaps = mocks.osrm.requests.slice(1).map((r, i) => r.at - mocks.osrm.requests[i].at)
     // Observed in the mock, where a loaded machine adds jitter: 500 ms proves the requests are spaced
     // rather than sent in a burst; the exact 1 s rule is unit-tested with fake timers.

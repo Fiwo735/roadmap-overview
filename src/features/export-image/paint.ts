@@ -229,7 +229,7 @@ export function paintLabels(ctx: CanvasRenderingContext2D, labels: readonly Labe
 
 // ---- Cards --------------------------------------------------------------------------------------
 
-function paintBox(ctx: CanvasRenderingContext2D, w: number, h: number, radius: number | [number, number, number, number], theme: CardTheme, { scale, u }: PaintScale, shadow = true): void {
+export function paintBox(ctx: CanvasRenderingContext2D, w: number, h: number, radius: number | [number, number, number, number], theme: CardTheme, { scale, u }: PaintScale, shadow = true): void {
   ctx.save()
   if (shadow) {
     ctx.shadowColor = theme.shadow

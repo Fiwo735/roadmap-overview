@@ -52,6 +52,11 @@ export interface Mocks {
     requests: RecordedRequest[]
     /** Artificial latency per response. */
     delayMs: number
+    /**
+     * Answers wait for this promise too, once the request has been recorded: a test holds the routing where it wants it (a request in
+     * flight) until it has done what it wants to look at, then settles the promise. Set it back to null for the requests that follow.
+     */
+    gate: Promise<void> | null
     /** Make the next responses fail: an OSRM error code ('NoRoute'), 'http-500', or 'network' (abort). */
     failWith: 'NoRoute' | 'InvalidQuery' | 'http-500' | 'network' | null
   }
@@ -109,6 +114,7 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
     const url = new URL(request.url())
     mocks.osrm.requests.push({ url: request.url(), at: Date.now() })
     if (mocks.osrm.delayMs > 0) await new Promise((r) => setTimeout(r, mocks.osrm.delayMs))
+    if (mocks.osrm.gate) await mocks.osrm.gate
 
     const failure = mocks.osrm.failWith
     if (failure === 'network') return route.abort('failed')
@@ -155,7 +161,7 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
 function freshMocks(): Mocks {
   return {
     tiles: { requests: 0, urls: [], delayMs: 0, inFlight: 0, peak: 0, failWith: null, png: null, cors: true },
-    osrm: { requests: [], delayMs: 0, failWith: null },
+    osrm: { requests: [], delayMs: 0, gate: null, failWith: null },
     nominatim: { requests: [], delayMs: 0, failWith: null },
     blocked: [],
   }

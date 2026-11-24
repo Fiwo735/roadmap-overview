@@ -3,7 +3,7 @@
 A single-page web app for summarising a campervan trip: an OpenStreetMap map with numbered,
 labelled stops joined by the route actually taken (road-routed, reshapeable by dragging like
 Google Maps, plus hand-drawn ferry/train/flight legs), trip statistics, a "ride" animation of a
-little campervan driving the route day by day, JSON save/load/share and PNG export.
+little campervan driving the route day by day, JSON save/load/share, PNG export and a rendered video of the ride.
 
 Everything runs in the browser. There is no backend: OSM tiles, OSRM routing and Nominatim
 geocoding are called directly from the client.
@@ -20,6 +20,7 @@ geocoding are called directly from the client.
 | Geometry | `@mapbox/polyline` (precision 5) |
 | Countries | `world-atlas` 50 m boundaries + `topojson-client` (own lazy chunk), `flag-icons` SVGs |
 | Share links | `lz-string` (`compressToEncodedURIComponent`) |
+| Video | WebCodecs `VideoEncoder` (H.264 → MP4, else VP9/VP8 → WebM) + `mediabunny` (MPL-2.0) for the file container, in its own lazy chunk; `MediaRecorder` on the canvas where there is no WebCodecs (F13) |
 | Tests | Vitest (pure logic), Playwright 1.63 (`@playwright/test`, pinned to the preinstalled browsers) |
 
 ## Screen layout
@@ -93,8 +94,12 @@ src/
     ride/                    RideButton (+ VehiclePicker, the chevron joined to it), RideHud (day, leg, controls), RideLayer +
                              rideScene (van, trail, camera), rideStore (playback + controls), timeline (the pure ride clock),
                              camera, vehicles (the artwork; SVG and canvas)
-    export-image/            image export (F7): ExportImageButton → ExportDialog, the canvas renderer
-                             (renderTripImage + geometry, card, legend, labelPlacement, paint, …)
+    export-image/            export dialog and image export (F7): ExportImageButton → ExportDialog (tabs Image | Video, the footer is a slot
+                             the tab portals its buttons into; `exportTab.ts` has the tab store and `openExportDialog`) → ImagePanel, the canvas
+                             renderer (renderTripImage + geometry, card, legend, labelPlacement, paint, …)
+    export-video/            video export (F13): VideoPanel (the Video tab, lazy chunk), the scene (`scene.ts`: layout, one background picture,
+                             a crop and vector overlays per frame), schedule (the video's clock), camera (still / following), hud (day panel),
+                             encoding (what this browser can encode), frameSink (VideoEncoder + mediabunny, or MediaRecorder), renderRideVideo
     help/                    HelpDialog (how-tos + the shortcut table in `shortcutList.ts`), HelpButton, `?` key
                              (`helpActions`), WelcomeHint (first-visit card, `welcomeStore`) (F8)
     presentation/            presentationStore, PresentationButton (+ `usePresentationKeys`), PresentationLayer (F8)
@@ -117,7 +122,7 @@ folders. Slots and where they render:
 | `places/PlacesPanel` | sidebar content (renders `legs/LegConnector` between its rows) |
 | `stats/StatsOverlay` | map overlay, top-left |
 | `routing/MapTools` | map overlay, top-right |
-| `ride/RideHud` | map overlay, bottom-centre |
+| `ride/RideHud` | map overlay, bottom-centre (its "Record video" button opens the export dialog on the Video tab) |
 | `places/PlacesLayer`, `routing/RouteLayer`, `routing/RouteManager`, `ride/RideLayer` | children of the `MapContainer` (`features/map/MapView.tsx`); use `useMap()` and the pane names from `features/map/panes.ts` |
 
 ## Data model
@@ -170,7 +175,7 @@ See `src/types/trip.ts`. Key rules:
   the undo history, the autosave, the recent trips or a share link: those hold `Place.photos` references only.
 - **Debug hook.** In dev builds `window.__ROADMAP__` exposes the stores (`trip`, `ui`, `routes`,
   each a Zustand store; `trip.temporal` is the undo history), `getMap()` (the Leaflet map), `photos` (`collectGarbage()` for the
-  photo store, F11) and, once the top bar has mounted, `ride` (the ride's store and controls, F6) so Playwright and humans can inspect
+  photo store, F11) and, once the top bar has mounted, `ride` (the ride's store and controls, F6) and `video` (draw one frame of the video, or render one: F13) so Playwright and humans can inspect
   and drive state programmatically. Stripped from production.
 
 ## External services (and their usage policies)
@@ -179,7 +184,7 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 
 | Service | Use | Rules we follow |
 | --- | --- | --- |
-| `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution on the live map (Leaflet's control); on an exported image a credit either drawn in it or posted beside it with the copyright URL (F12); tiles are downloaded with `fetch` in CORS mode (`services/seaTiles.ts`, F9: the pixels are read to hide the borders on the sea, and the canvas stays readable for the export), one request per tile, no bulk prefetching, a tile nobody wants any more (it left the view) is aborted, processed tiles are kept in memory (160, an LRU) so a tile seen again is not downloaded or processed again. The image export (`services/tiles.ts`) only fetches when the user opens the dialog or presses a button, at most 300 tiles per image (the tile zoom is lowered to stay within it; the preview is drawn small, ≈ 20 tiles), **≤ 6 downloads in flight in total** across all renders (a tile of an abandoned preview still on its way counts), one download per URL however many renders want it, requests still queued when their render is abandoned are dropped, tiles kept in memory (220) so redrawing costs no request, and a failed tile is not asked for again for 30 s by previews (an explicit Download / Copy does retry them). |
+| `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image and video export | Visible "© OpenStreetMap contributors" attribution on the live map (Leaflet's control); on an exported image a credit either drawn in it or posted beside it with the copyright URL (F12); tiles are downloaded with `fetch` in CORS mode (`services/seaTiles.ts`, F9: the pixels are read to hide the borders on the sea, and the canvas stays readable for the export), one request per tile, no bulk prefetching, a tile nobody wants any more (it left the view) is aborted, processed tiles are kept in memory (160, an LRU) so a tile seen again is not downloaded or processed again. The image and video export (`services/tiles.ts`) only fetch when the user opens the dialog or presses a button, at most 300 tiles per image or video (the tile zoom is lowered to stay within it; the preview is drawn small, ≈ 20 tiles; a video draws its map once, as one background picture, and crops it for every frame, so it never asks for tiles per frame, F13), **≤ 6 downloads in flight in total** across all renders (a tile of an abandoned preview still on its way counts), one download per URL however many renders want it, requests still queued when their render is abandoned are dropped, tiles kept in memory (220) so redrawing costs no request, and a failed tile is not asked for again for 30 s by previews (an explicit Download / Copy does retry them). |
 | `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=true&alternatives=false` (the steps only tell where a route takes a ferry, see F3); one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; out-and-back stubs at via points cut out, then the geometry simplified (12 m) before caching (F10). |
 | A trip file URL the user gives as `?src=…` (and the bundled `samples/…` on this site) | Opening a trip someone published, e.g. a gist | GET only (`services/tripSource.ts`), http(s) only, no credentials or referrer, 20 s timeout, 20 MB cap; the other server has to allow cross-origin reads (CORS). |
 | `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
@@ -260,6 +265,8 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
 - Visual verification uses real tiles/routing/search through a dev server and screenshots.
   Chromium reaches the internet through the sandbox proxy: launch it with
   `proxy: { server: process.env.HTTPS_PROXY, bypass: 'localhost,127.0.0.1' }`.
+- The video specs (`e2e/export-video.spec.ts`) render real, small videos in headless Chromium (WebCodecs H.264/VP9 and `MediaRecorder` are there; a render of 8 s at 720p takes
+  about 5 s, the real-time recorder test 11 s) and read them back (an MP4's `moov`, a WebM's first bytes, a WebM played in a `<video>`).
 - Several agents may run at once: always pass an explicit, unique port.
 - CI is one workflow, `.github/workflows/deploy-pages.yml` (F15): type check, lint and the unit tests gate a sub-path build that is deployed
   to GitHub Pages. **Playwright does not run in CI** (it needs the browsers and takes minutes); run `npm run e2e` before pushing.
@@ -1297,8 +1304,8 @@ rules (the tile usage policy requires visible attribution as well).
   text has a hyphen where the caption has a dash). It travels with the file wherever it is posted; the visible credit is still what
   the guidelines require.
 - **Live map**: unchanged (Leaflet's attribution control, "interactive map" rule).
-- **Ride video export (planned)**: follows the guidelines' video rule: the credit goes **on the video itself** (the map is the focus
-  and there is no place beside it), i.e. it will always use the in-image credit, not offer "beside". Reuse `paintCredit` / `placeCredit`.
+- **Ride video export** (done in F13, below): follows the guidelines' video rule: the credit goes **on the video itself** (the map is the focus
+  and there is no place beside it), i.e. it always uses the in-image credit, never "beside". It reuses `paintCredit` / `placeCredit`.
 - **Shared-file edits**: `services/config.ts` loses `TILE_ATTRIBUTION_TEXT` (the exporter's plate text, now in `attribution.ts`);
   README and Help text; `components/*` and `types/trip.ts` untouched.
 - **Tests**: Vitest: the texts (© OpenStreetMap and the URL in both), corner choice and collisions, the view fit keeping clear of the
@@ -1368,7 +1375,7 @@ rules (the tile usage policy requires visible attribution as well).
   beginning while open), ferries keep the ferry, west facing, same size for all vehicles.
 - **Known gaps**: the vehicle pictures are drawn by hand and recognisable rather than exact (the Daily is a generic long, high-roof panel
   van with its proportions, not a licensed likeness); the picker's previews are not animated; a vehicle other than the campervan is not shown in
-  the README screenshots; the remembered vehicle is per browser (not synced between devices), and re-clicking the checked vehicle also remembers it; the image export does not draw the vehicle (the video export that will can call `drawVehicle` / `drawTransport`).
+  the README screenshots; the remembered vehicle is per browser (not synced between devices), and re-clicking the checked vehicle also remembers it; the image export does not draw the vehicle (the video export, F13, does: it calls `drawTransport`).
 
 ### F15 — deployment to GitHub Pages
 
@@ -1394,3 +1401,95 @@ rules (the tile usage policy requires visible attribution as well).
 - **Known gaps**: the site is only as good as the default branch (there are no preview deployments for other branches); `npm run e2e` is
   not part of the pipeline; a user-page repository (`<user>.github.io`) would need `BASE_PATH=/` in the workflow; the main JS chunk
   (about 640 kB) and the lazy country-boundary chunk (about 770 kB) trigger Vite's size warning, which is expected and harmless.
+
+### F13 — a video of the ride
+
+The export dialog gained a **Video** tab; it renders the ride as an MP4 (or WebM), in the browser, faster than real time.
+
+- **Dialog** (`export-image/ExportDialog.tsx`, `exportTab.ts`): now a shell with real tabs (`role=tablist`, arrows/Home/End, `Image` | `Video`) around
+  `ImagePanel` (the F7 dialog's body, moved unchanged apart from its buttons) and `VideoPanel`. The dialog's footer is a **slot**: the shown tab portals its own
+  buttons into it (`createPortal(…, footer)`), so Image has Copy/Download and Video has Render / Cancel / Render again · Share · Download. `useExportTab`
+  = `{ tab, busy, returnFocusTo }`; `openExportDialog(tab, opener?)` opens it (the top bar's button → Image; **the ride HUD's "Record video"** → Video, it pauses the
+  ride first and gives the focus back to its own button when the dialog closes). While a render or an image download runs the other tab is `aria-disabled`
+  (switching would unmount and stop it). `VideoPanel` is a lazy chunk (36 kB, 14 kB gzipped; the main bundle grew by 5 kB); `mediabunny` is a second one (161 kB,
+  43 kB gzipped) loaded when a render starts. The dialog title is "Export image or video" (the old name is still a substring). `PresetPicker` takes its
+  presets, label and test-id prefix.
+- **Options** (`options.ts`, `videoStore.ts`, `localStorage["roadmap-overview:video-options"]`, repaired field by field like the image's): size `landscape` 1920×1080 ·
+  `square` 1080×1080 · `vertical` 1080×1920 · `hd` ("Quick") 1280×720; length `15` | `30` | `60` | `ride`; camera `whole` | `follow`; title card, place names, legend;
+  card style (Match app / Light / Dark: the card, legend and day panel). Defaults: landscape, 30 s, whole trip. File name `<slug of the title>-ride.mp4|webm` (`trip` when there is no title).
+- **One clock** (`ride/rideStore.ts` `timelineFor(places, legs, startDate)`, which the ride's own `currentTimeline` now calls too): the video plays **the ride's
+  timeline** (`buildTimeline` / `sampleTimeline`), so days, travel and rest slots (and their caps), leg shares, ferry stretches inside drive legs, the vehicle
+  that switches to ferry/train/plane, the date and the caption (`rideCaption`, `formatRideDate`) are the live ride's, not a copy. `schedule.ts` only maps video seconds
+  onto it: **30 fps**, an intro hold of 1 s on the start (rideTime 0), the ride at a steady pace, an end hold of 3 s on the finished trip. A fixed length is the
+  whole video (the ride is what is left after the 4 s of holds); *Ride pace* is `timeline.duration` (at 1× speed) clamped to 4 s … 116 s; **no video is longer than
+  `MAX_VIDEO_S` = 120 s** (the dialog says when that sped it up, and when a fixed length makes it hurried: ≥ 2.5 days a second).
+- **Scene** (`scene.ts`, `prepareVideoScene` → `VideoScene { draw(ctx, i), info(i), … }`; prepared once, reused by the preview, the render and the debug hook):
+  lays out like the image (`unwrapTrip`, `buildCardContent`/`layoutCard`, `layoutLegend`, `placeCredit`, `fitViewport` with the card, legend, **day panel** (bottom-centre) and credit
+  as obstacles, `ensureFonts`), fetches the tiles of **one background picture** through the shared `tileClient` (≤ 6 at a time, ≤ 300 tiles, `retryFailed` for a real render) and paints
+  it once with `paintTiles`. Every frame is then a crop of that picture under the frame's camera plus **vector** overlays: the planned route faint (`.ride-dimmed`'s 0.38) — as
+  `Path2D`s built once in the background's pixels, stroked under the camera's transform with widths divided by its scale, so lines stay crisp — the trail (done legs merged
+  per style into one path and grown one leg at a time like `rideScene`, the current leg clipped with `clipPath`, `planLegParts(…, selected = true)`, the ride's heavier style), the
+  ferry/train/plane badges, the green stop rings (grow in over 0.28 s, the parked one pulses), numbered markers, name labels, the vehicle
+  (`drawTransport` with the trip's vehicle: facing with `nextFacing`'s hysteresis, wheel angle and bob from the video clock, parked beside its stop, a "Day N" tag, all worked out per frame
+  up front so any frame can be drawn on its own), then the card, legend, **day panel** (`hud.ts`: "Day N", the date, the distance so far, the leg with its mode icon, a progress bar; fixed size,
+  texts cut with `ellipsize`) and the credit. With a still camera the map and the faint route are painted once into a canvas that every frame copies. A frame costs a few ms at 720p.
+- **Camera** (`camera.ts`, pure): *Whole trip* is the image's fit, never moving. *Follow*: the background is a bigger picture at the **follow zoom** — the median over the travel days of the
+  zoom that fits a day's legs (as the live ride, `pickFollowZoom`; at least one level closer than the whole trip, ≤ 13) — covering the route with half a frame to spare plus the whole-trip view,
+  lowered by quarter levels until it fits **16 Mpixel and 300 tiles** (`planFollowBackground`; the least it accepts is the whole zoom + 0.25). Otherwise the trip is shown whole and the dialog says why, in one of two ways: **a trip so small that its whole view
+  is already as close as the camera zooms** (`pickFollowZoom` → null when the whole zoom + 0.25 is beyond 13: two places a metre apart) gets "nothing to follow"; a map that fits neither the pixel nor the tile cap gets the
+  cap as the reason. The cap is rarely the reason: measured, Lyon → Annecy → Zurich, Paris → Lyon, Lyon → Annecy and Lisbon – Paris – Moscow all follow at every size, with 120 – 270 tiles. The camera path per frame (`planFollowCamera`): the whole trip during the holds, easing (smoothstep, ≤ 1.6 s) in to
+  and out of the **vehicle's track smoothed in both directions in time** (`smoothTrack`: a zero-phase first-order filter, τ 0.55 s, so there is no lag; the vehicle may drift ≤ 20 % × 18 % of the
+  frame from where it should sit, so a flight's jump keeps it in view; it sits in the middle of what the day panel leaves free). While the camera is close the title card fades out
+  (`cardAlpha`: it would cover the road) and returns on the end hold; names are placed twice (whole-trip clear of the overlays, and at the closer zoom) and cross-fade
+  through nothing while the camera zooms (`labelBlend`). Zoom changes crop the background at a lower scale, so the background's zoom is the sharpest it ever is.
+- **The OpenStreetMap credit**, and why it is in the picture. The OSMF Attribution Guideline for *TV, film, or video productions* says: "For fictional productions or where the map is
+  not the focus of the production, attribution may be given on the map, in end credits, or, if the video is distributed via a digital format that includes a description, within the
+  description. When attributing via the end credits or the description, the URL to openstreetmap.org/copyright must be included." and, "For productions where an OpenStreetMap map is a
+  major component of what is shown to users, the attribution should typically appear in a corner of the map, in addition to attribution in the end credits or description. As long as the
+  credit is on screen long enough to be read, it does not have to remain in view during panning or zooming." The map **is** the focus here, so the credit is **on the video**, always (there is
+  no "beside" for a video and no switch): "© OpenStreetMap · openstreetmap.org/copyright" (`IMAGE_CREDIT_TEXT`, drawn by the image's `placeCredit`/`paintCredit`, text with a halo, no plate)
+  in a corner for the first **5 s** at full strength (the interactive-map rule's time), fading over 0.6 s, and again from 0.3 s before the **end hold** to the last frame (≥ 2.7 s at full
+  strength: the end credits); `creditAlpha` in `schedule.ts`. Its letters are 2.2 % of the shorter side (about 24 px of 1080, never below 16 px, which is 720p: a video is watched
+  much smaller than it is made — on a phone a 1080 px picture is scaled to about a third — so the image export's 11 px would be a smear, `credit.ts`), in the first corner (bottom-right, top-right, bottom-left, top-left) that does not meet the card, legend or day panel — usually bottom-right, top-right in the
+  square and vertical sizes. For "in addition to … the description" the tab shows the caption *Map © OpenStreetMap — openstreetmap.org/copyright* with a Copy button ("add it to the
+  description when you post it"), **Share** passes it as the share's text, and the file's metadata carries a `comment` with it (and the trip's title) — the user still has to post it, as with the
+  image's caption.
+- **Encoding** (`encoding.ts`, `frameSink.ts`, `renderRideVideo.ts`). `detectEncoding(size, fps)` asks `VideoEncoder.isConfigSupported` about `avc1.640028` → `avc1.4d0028` → `avc1.420028` (MP4) →
+  `vp09.00.40.08` → `vp8` (WebM) at the video's size; `chooseEncoding` (pure) takes the first supported, else `MediaRecorder` (`video/mp4;codecs=avc1…`, `video/webm;codecs=vp9`, …, on
+  `canvas.captureStream`), else says the browser cannot (Render disabled, with a note). Bit rate (`videoBitrate`, 2.5 … 14 Mbit/s): 0.12 bit per pixel and frame for a still map (1080p30: 7.5 Mbit/s, 720p30: 3.3), 0.18 for a following camera (11.2 and 5.0), which slides the whole picture under thin dashed lines
+  at every frame and, at 2.8 Mbit/s in 720p, smeared the route in the zoom ramps; it is worked out from the camera the scene really has. **WebCodecs path**: every frame is drawn on one canvas,
+  becomes a `VideoFrame` (timestamp `i/30` s; a key frame every 60), is encoded and closed at once — nothing is kept but the compressed packets, which go into **mediabunny**'s
+  `Output` (`Mp4OutputFormat({ fastStart: 'in-memory' })` or `WebMOutputFormat`, `BufferTarget`, an `EncodedVideoPacketSource` per codec) one at a time in order; the encoder is not fed while
+  4 frames wait in it (`encodeQueueSize`, `dequeue`), which with the main thread being handed back **after every frame** (a `MessageChannel` message: a task of its own that queues fairly with timers and input, and is not slowed to once a second in a
+  background tab as `setTimeout` is; `scheduler.yield()` was tried first and resumes ahead of other tasks, which starved the timers) keeps the page responsive: measured on a 30 s 1080p following render of eight stops, a 50 ms timer ran every 54 ms
+  (median; 118 ms when yielding only after 12 ms of drawing, as every frame takes more), and the page had 24 tasks over 50 ms (the longest 138 ms) instead of 43 (243 ms). **Recorder path**: the canvas is captured with `captureStream(0)` + `requestFrame()` and the loop is paced by the wall clock (`pace(i)`), skipping frames when drawing falls behind: the
+  video has its length, in real time, in whatever quality the browser picks (a Chromium WebM has no duration/cues). Abort (`AbortSignal`, from Cancel or the dialog closing) is checked every frame: the
+  encoder is closed and `Output.cancel()`ed, nothing is kept, an AbortError reaches the dialog ("Cancelled: nothing was kept."). The MP4 is made `fastStart` (playable while loading, shareable). **The output is full-range**: `ffprobe` says `pix_fmt=yuvj420p`, `color_range=pc`, BT.709 matrix, sRGB transfer, as the canvas hands it to the encoder
+  (nothing converts it to limited range); players that assume limited range for H.264 may show it a little flat or contrasty.
+  **Why mediabunny** (MPL-2.0; new runtime dependency `mediabunny` ^1.66): it is the maintained successor of `mp4-muxer` and `webm-muxer` (MIT, both marked deprecated in its favour by the same author), one API for both containers
+  with metadata tags, tree-shakable (the build keeps 43 kB gzipped of 11 MB of package), pure TypeScript with no native or WASM code. MPL-2.0 is file-level copyleft: using the unmodified package as
+  a dependency adds nothing to this app's own terms. It sits in its own lazy chunk.
+- **The Video tab** (`VideoPanel.tsx`, `useVideoPreview.ts`): the preview is a frame of the real video — `prepareVideoScene` at ≤ 960 px (`previewScaleFor`, coarser tiles, so few of them), debounced like the
+  image's — with a **slider** to look at any moment of it (default 40 %; "Day 6 · Preikestolen → Odda", "0:12 / 0:30"), the summary line "1920 × 1080 px · 0:30 · MP4 (H.264)" (the length from the timeline at once), the credit
+  box, and notes (a leg still routing disables Render with the ride's own reason; failed legs; capped or hurried length; the follow note; missing tiles; names that did not fit; recorder in real
+  time). **Render video** shows a progress bar over three steps (map tiles 10 %, frames, closing the file; `progress.ts`), the step in words and **the time left** from the frames done so far
+  (`estimateRemainingS`, "About 25 seconds left"), "Keep this tab open", and **Cancel**. When it is done the finished video replaces the preview in a `<video controls>` (it stays until a choice changes or the next render starts — it is matched by a key of the choices and the trip's content, `tripFingerprint`, not by the objects the parameters are made of, which are new whenever a route
+  arrives late or the statistics are worked out again — and then the preview comes back and the file and its object URL are let go of), with "Video ready: 1280 × 720 px, 0:34, 2.1 MB (MP4)"; **Download video** and, where `navigator.canShare({ files })` says yes, **Share** (`navigator.share` with the `File` and the caption as text) and Render again.
+- **Debug hook** `window.__ROADMAP__.video` (dev builds; `debugTypes.ts` has the typing, `debug.ts` the code): `frame(at, options?, scale?)` → a PNG data URL and the frame's `info`, drawn by
+  the same scene/draw code as the render, `render(options?, encoding?, size?)` → a whole video, at the preset's size or a small `size` (the file as base64, its signature, its length), `encoding(size?)`.
+- **Measured** (headless Chromium on a shared 4-CPU box, mocked tiles): a 34 s, 1280 × 720, 1 017-frame MP4 of the sample trip (whole trip) renders in about 11 s (3× real time) and is 2.1 MB (3.7 MB over real
+  tiles; `ffprobe`: H.264 High, 30 fps, 1017 frames, 33.9 s); the follow background of the sample trip at 1080p is 182 tiles; a real-tile render at 720p of the sample asked for 20 tiles in the preview and 7 more in the render (the rest were kept).
+- **Shared-file edits** (all additive): `ride/rideStore.ts` (`timelineFor`), `ride/RideHud.tsx` (the Record video button), `export-image/legDrawing.ts` (`planLegParts`, `LegLine`; `planLegs` uses it), `export-image/paint.ts`
+  (`paintBox` exported), `export-image/PresetPicker.tsx` (generic), `export-image/ExportImageButton.tsx`, `export.css`, `package.json` (`mediabunny`), the Help dialog, and the README (a "Video export" section and `docs/screenshots/video-export.png`: real tiles, 1280 × 960 CSS px at 2×, the dialog's 720 px height cap lifted for the picture so all of the tab shows, resized to 1600 px and reduced to 256 colours like the others). `types/trip.ts` unchanged.
+- **Tests**: Vitest — `schedule.test.ts` (lengths, the cap, frame → ride time, holds, **credit timing**: full for 5 s, fades, gone mid-ride, back for ≥ 2.5 s on the end hold, never missing in the shortest video),
+  `camera.test.ts` (zero-phase smoothing: no lag on a steady drive, symmetric glide on a jump, no overshoot; follow weight and ramps; the camera during holds and while following, kept near the focus, smooth, vehicle kept in view on a jump;
+  card/label fades; follow zoom; the background within the pixel and tile caps and around the whole view), `encoding.test.ts` (codec/muxer choice and fall-backs, recorder fall-back, nothing available, bit rate), `progress.test.ts`, `hud.test.ts`, `credit.test.ts` (legible in every preset),
+  `options.test.ts`; `planLegParts` and `timelineFor` in the existing suites. Playwright `e2e/export-video.spec.ts` (mocked tiles): the tabs (mouse, keyboard), the HUD button (Video tab, ride paused, focus back), the choices and their persistence
+  (and damaged ones), disabled states (one place, legs routing, no encoder), the preview slider and the credit in it (start, end, none mid-ride), the card in whole and follow, **a frame saved as a PNG through the same code as the render** (start/middle/end: size, credit corner,
+  trail growing, stops turning green; attached to the test), a following camera within 300 tiles and 6 in flight and no new tile requests for more frames, a ferry stretch, **a real render** (MP4 `ftyp`, 1280 × 720 and 8.0 s read from the `moov`, plausible size, the file name from the title, progress that only
+  grows, the time left, the other tab locked meanwhile), the finished video in the preview and its going away with a choice, **Cancel** (nothing downloaded, the next render works), closing the dialog mid-render (no more tile requests), a **WebM (VP9)** when H.264 is refused, the
+  **MediaRecorder** fallback (WebM, real time), share (a stubbed `navigator.share` gets the file, its name and the credit), a **following render end to end**, the finished video **surviving** a new route-store object behind it, **the two-minute cap in a real render** (60 train legs, 3 600 frames at 320 × 180, `moov` says 120 s), the follow note for a trip too small to zoom into, and **the credit really in the encoded video** (a WebM played back in the page and its pixels read at 0.5 s, 2 s, 8 s, 13.5 s and 14.8 s).
+- **Known gaps**: the preview is a frame of the scene at preview scale, not the encoded video; no audio and no choice of frame rate; the video is held in memory until it is downloaded (up to ~170 MB for two minutes of 1080p following, and twice that for a moment while the file is finished);
+  the recorder fall-back needs the tab in front for the whole length and its WebM is not seekable in Chromium; a trip too small to zoom into, or whose follow map fits no cap, is shown whole; names are not avoided by the vehicle;
+  a trip that crosses the date line is drawn as one continuous map (as the image) but not by the live ride;
+  Firefox without an H.264 encoder makes a WebM; the credit's text is fixed (not translated).

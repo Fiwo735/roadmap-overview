@@ -19,9 +19,11 @@ import {
   setRideSpeed,
   startRide,
   stepRideDay,
+  timelineFor,
   toggleRide,
   useRideStore,
 } from './rideStore'
+import { getLegRoutes } from '../routing/legRoutes'
 import { REST_DAY_S, TRAVEL_DAY_S } from './timeline'
 
 const trip = () => useTripStore.getState()
@@ -257,5 +259,24 @@ describe('the trip changing under a ride', () => {
     expect(ride().active).toBe(true)
     trip().removePlace(trip().trip.places[0].id)
     expect(ride().active).toBe(false)
+  })
+})
+
+describe('timelineFor', () => {
+  it('is the timeline the ride plays: the same days, legs and duration', () => {
+    seedTrip(4)
+    const { places, startDate } = trip().trip
+    const timeline = timelineFor(places, getLegRoutes(), startDate)
+    expect(timeline).not.toBeNull()
+    startRide()
+    expect(ride().timeline?.duration).toBe(timeline?.duration)
+    expect(ride().timeline?.slots.length).toBe(timeline?.slots.length)
+  })
+
+  it('is null for a trip with nothing to ride: fewer than two places, or legs that do not match the places', () => {
+    seedTrip(3)
+    const { places } = trip().trip
+    expect(timelineFor(places.slice(0, 1), getLegRoutes().slice(0, 0))).toBeNull()
+    expect(timelineFor(places, getLegRoutes().slice(0, 1))).toBeNull()
   })
 })

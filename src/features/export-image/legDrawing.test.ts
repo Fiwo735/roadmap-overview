@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CASING_EDGE, haloDash, MODES, STRAIGHT_DRIVE_DASH } from '../../lib/modes'
 import { ERROR_COLOR, LOADING_COLOR } from '../routing/legStyle'
 import { legRoutesOf, makeTrip, place } from '../stats/testHelpers'
-import { planLegs } from './legDrawing'
+import { planLegParts, planLegs } from './legDrawing'
 
 const a = place('a', 45, 5)
 const b = place('b', 46, 6)
@@ -83,5 +83,36 @@ describe('planLegs', () => {
     expect(failed.parts[0].line.color).toBe(ERROR_COLOR)
     // The ferry leg is hand-drawn, so it is always known, and keeps its badge.
     expect(failed.badges.map((s) => s.mode)).toEqual(['ferry'])
+  })
+})
+
+describe('planLegParts', () => {
+  const coords = [a, b]
+
+  it('draws one leg the way planLegs does', () => {
+    const trip = makeTrip([a, b])
+    const [info] = legRoutesOf(trip, { 0: {} })
+    const parts = planLegParts({ mode: 'drive', straight: false, status: 'ok', coords: info.coords })
+    expect(parts).toEqual(planLegs([info]).parts)
+  })
+
+  it('draws the heavier style of a selected leg, which the ride\'s trail uses', () => {
+    const [plain] = planLegParts({ mode: 'drive', straight: false, status: 'ok', coords })
+    const [trail] = planLegParts({ mode: 'drive', straight: false, status: 'ok', coords }, true)
+    expect(trail.line.weight).toBe(plain.line.weight + 4)
+    expect(trail.casing?.weight).toBe((plain.casing?.weight ?? 0) + 4)
+  })
+
+  it('draws the ferry stretches of a drive leg in the ferry style, and a leg not routed yet as the placeholder', () => {
+    const points = [a, { lat: 45.3, lng: 5.3 }, { lat: 45.6, lng: 5.6 }, b]
+    const spans = [
+      { mode: 'drive' as const, from: 0, to: 1, distanceM: 1, durationS: 1 },
+      { mode: 'ferry' as const, from: 1, to: 2, distanceM: 1, durationS: 1 },
+      { mode: 'drive' as const, from: 2, to: 3, distanceM: 1, durationS: 1 },
+    ]
+    const parts = planLegParts({ mode: 'drive', straight: false, status: 'ok', coords: points, spans })
+    expect(parts.map((p) => p.line.color)).toEqual([MODES.drive.color, MODES.ferry.color])
+    const [loading] = planLegParts({ mode: 'drive', straight: false, status: 'loading', coords })
+    expect(loading.line.color).toBe(LOADING_COLOR)
   })
 })

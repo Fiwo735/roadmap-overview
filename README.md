@@ -6,7 +6,7 @@
 add the places you stop at, give each a day, and the app draws the route between them: roads you can reshape by dragging the line (like
 Google Maps), plus ferry, train and flight legs drawn by hand. A title card shows the distance, driving time, days and the countries you
 pass; a little campervan can *ride* the route day by day; and the trip can be saved as a file, shared as a link, shown full-screen or
-exported as a picture. Everything runs in the browser: there is no backend and no account, and the trip stays in your browser until you
+exported as a picture or a video of the ride. Everything runs in the browser: there is no backend and no account, and the trip stays in your browser until you
 save or share it.
 
 **Live site: <https://fiwo735.github.io/roadmap-overview/>** (published from this repository, see [Deployment](#deployment)).
@@ -68,7 +68,7 @@ hours ("34 h 28 min"). Fold the card into a pill with the chevron.
 
 **Ride** plays the trip as your vehicle (a campervan unless you choose another) driving the route day by day (a ferry, train or plane on those legs), with a trail behind it, the
 day and date, the distance so far and a scrubber. Space plays or pauses, ← and → jump between days, **Follow** keeps the camera on the
-vehicle, Esc closes it.
+vehicle, Esc closes it. The clapperboard button in the controls, **Record video**, opens the [video export](#video-export).
 
 **Choose the vehicle** with the small arrow next to the Ride button: a campervan (the default), a black **Iveco Daily**, a retro camper bus,
 a motorhome, a car with a caravan or a 4×4 with a roof tent. Each has a few body colours and a free choice (the Daily is always black). The
@@ -88,7 +88,7 @@ that opens a trip straight in this mode (see [Sharing](#sharing)).
 
 ### Image export
 
-The **Export image** button in the top bar (the picture icon) opens a dialog that renders the whole trip as a **PNG picture**: the map with
+The **Export image** button in the top bar (the picture icon) opens a dialog whose *Image* tab renders the whole trip as a **PNG picture**: the map with
 the route, numbered stops, the title and statistics card and the legend. Choose a size (landscape
 1920 × 1080, portrait, square, or A4 print), a sharper 2× resolution, what to show (card, place names, day numbers, legend), the card
 style (match the app, light or dark) and where the **map credit** goes, check the live preview, then **Download PNG** or **Copy image**.
@@ -104,6 +104,32 @@ credit drawn in a corner of the picture instead: small, discreet text with a sof
 printed beside it, with the address openstreetmap.org/copyright.
 
 ![An image exported from the sample trip: the map with the route, the stops and the title card](docs/screenshots/exported-image.jpg)
+
+### Video export
+
+![The Video tab of the export dialog: a frame of the video with its slider, the sizes, lengths and camera](docs/screenshots/video-export.png)
+
+The same dialog has a **Video** tab (the clapperboard button in the ride's controls opens it there) that renders the ride as a **video**:
+the planned route faint under the trail the vehicle leaves, the stops turning green as they are reached, the vehicle on the road and the
+ferry, train or plane on those legs, and a panel with the day, the date, the distance so far and where it is going. The video opens with a
+second on the start and ends with a few seconds on the finished trip.
+
+- **Size:** Landscape 1920 × 1080, Square 1080 × 1080, Vertical 1080 × 1920 (stories and reels) or a quick 1280 × 720. 30 frames a second, no sound.
+- **Length:** 15, 30 or 60 seconds, or *Ride pace*, the speed of the live ride (never more than two minutes, however long the trip).
+- **Camera:** *Whole trip* keeps the whole trip in view; *Follow* follows the vehicle at a closer zoom, smoothly, and shows the whole trip at
+  the start and the end. A trip that is too small to zoom into, or whose map would need more than the tile limit (300 tiles) to be followed at a closer zoom, is shown whole instead, and the dialog says why.
+- Title card, place names and legend can be switched off, and the card style is the same Match app / Light / Dark as for the image. A slider
+  under the preview shows any moment of the video before you render it. Your choices are remembered.
+
+**Render video** shows a progress bar and the time left, and **Cancel** stops it; nothing is kept. When it is done, play it in the dialog,
+**Download video** (`<trip title>-ride.mp4`, or `.webm`) or **Share** it, where the browser can share files (phones). The video is made in
+the browser with WebCodecs, faster than real time: an H.264 MP4 where the browser can encode one (Chrome, Edge, Safari), else a VP9/VP8
+WebM. A browser without WebCodecs records the picture as it is drawn instead, which takes as long as the video does, so keep the tab in front.
+
+**The OpenStreetMap credit in a video.** The attribution guidelines let a video give its credit in the end credits or the description only
+when the map is *not* the focus; here it is, so the credit is **in the video**: "© OpenStreetMap · openstreetmap.org/copyright" in a corner
+for the first five seconds and again on the closing shot. Add *Map © OpenStreetMap — openstreetmap.org/copyright* (shown in the dialog,
+with a Copy button) to the description when you post it. It cannot be switched off.
 
 ### Saving, loading, sharing
 
@@ -129,7 +155,7 @@ another tile server (`TILE_URL`) nothing is hidden.
 The **?** button (or the `?` key) opens a help dialog with short how-tos and every keyboard shortcut. A first visit with an empty trip
 also shows a small dismissible hint.
 
-On phones the top bar keeps the title, Ride, Export image and File; undo, redo, presentation mode, help and the theme are in the **⋯** menu, and
+On phones the top bar keeps the title, Ride, Export image or video and File; undo, redo, presentation mode, help and the theme are in the **⋯** menu, and
 the places list is a slide-over from the button at the top-left.
 
 ## Keyboard shortcuts
@@ -242,8 +268,8 @@ npm run preview         # serve dist/
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** describes the structure (stores, map layers, routing, the data model) and keeps a log of every
   feature with its decisions and known gaps: read it before changing anything.
 
-Built with Vite, React, TypeScript, Leaflet, Zustand (with undo/redo), dnd-kit and a handful of small libraries; see the table in
-ARCHITECTURE.md.
+Built with Vite, React, TypeScript, Leaflet, Zustand (with undo/redo), dnd-kit and a handful of small libraries (the video export adds
+[Mediabunny](https://mediabunny.dev/), MPL-2.0, to put the encoded frames in an MP4 or WebM file); see the table in ARCHITECTURE.md.
 
 ## External services
 
@@ -253,7 +279,7 @@ tile provider) by editing that file and rebuilding.
 
 | Service | Used for | Policy and what the app does |
 | --- | --- | --- |
-| **OpenStreetMap tiles**, `tile.openstreetmap.org` | The map (and the exported image) | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): visible attribution (always shown on the map; for an exported image either drawn in it or, by default, as a caption beside it that includes openstreetmap.org/copyright, as the [attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines) require), no bulk downloading (an image export fetches only the tiles of its own picture, at most 300 and six at a time, and keeps them in memory), and no heavy use: a busy site should use its own tile server or a commercial provider and change `TILE_URL`. Tiles are downloaded with CORS (the server allows it) so their pixels can be read to hide the borders on the sea; processed tiles are kept in memory (160), so a tile you come back to is neither downloaded nor processed again. |
+| **OpenStreetMap tiles**, `tile.openstreetmap.org` | The map (and the exported image and video) | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): visible attribution (always shown on the map; for an exported image either drawn in it or, by default, as a caption beside it that includes openstreetmap.org/copyright, as the [attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines) require), no bulk downloading (an image or a video export fetches only the tiles of its own picture, at most 300 and six at a time, and keeps them in memory; a video draws its map once and crops it for every frame, it does not ask for tiles per frame, and its credit is in the video itself), and no heavy use: a busy site should use its own tile server or a commercial provider and change `TILE_URL`. Tiles are downloaded with CORS (the server allows it) so their pixels can be read to hide the borders on the sea; processed tiles are kept in memory (160), so a tile you come back to is neither downloaded nor processed again. |
 | **OSRM demo server**, `router.project-osrm.org` | Road routes between places | [Demo server policy](https://github.com/Project-OSRM/osrm-backend/wiki/Demo-server): light use only, no guarantees. The app sends at most one request at a time and one per second, never repeats a request (results are cached and saved with the trip) and does not retry in a loop: a failed leg shows a *Retry* button. For regular use run your own [OSRM](https://github.com/Project-OSRM/osrm-backend) (`OSRM_URL`, driving profile). |
 | **Nominatim**, `nominatim.openstreetmap.org` | Place search and naming dropped pins | [Usage policy](https://operations.osmfoundation.org/policies/nominatim/): at most one request per second, no search-as-you-type, cache results, identify the application. The app searches only on Enter or the search button, queues requests one per second, caches answers and sends the browser's own `Referer`. Self-host it or use a geocoding service with a compatible `/search` and `/reverse` API (`NOMINATIM_URL`) for more. |
 
