@@ -1,4 +1,7 @@
-/** Small least-recently-used cache: reads refresh an entry, the oldest is evicted beyond `limit`. */
+/**
+ * Small least-recently-used cache: reads refresh an entry, the oldest is evicted beyond `limit`. `onEvict`
+ * is told of every value that leaves the cache by being pushed out or replaced (not by `clear`).
+ */
 export interface Lru<K, V> {
   get: (key: K) => V | undefined
   has: (key: K) => boolean
@@ -7,7 +10,7 @@ export interface Lru<K, V> {
   readonly size: number
 }
 
-export function createLru<K, V>(limit: number): Lru<K, V> {
+export function createLru<K, V>(limit: number, onEvict?: (value: V, key: K) => void): Lru<K, V> {
   const map = new Map<K, V>()
   return {
     get(key) {
@@ -19,9 +22,17 @@ export function createLru<K, V>(limit: number): Lru<K, V> {
     },
     has: (key) => map.has(key),
     set(key, value) {
+      const had = map.has(key)
+      const replaced = map.get(key)
       map.delete(key)
       map.set(key, value)
-      if (map.size > limit) map.delete(map.keys().next().value as K)
+      if (had && replaced !== value) onEvict?.(replaced as V, key)
+      if (map.size > limit) {
+        const oldest = map.keys().next().value as K
+        const evicted = map.get(oldest) as V
+        map.delete(oldest)
+        onEvict?.(evicted, oldest)
+      }
     },
     clear: () => map.clear(),
     get size() {

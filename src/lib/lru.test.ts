@@ -31,4 +31,20 @@ describe('createLru', () => {
     lru.clear()
     expect(lru.size).toBe(0)
   })
+
+  it('tells onEvict about the values pushed out and replaced, not about the ones cleared', () => {
+    const evicted: [string, number][] = []
+    const lru = createLru<string, number>(2, (value, key) => evicted.push([key, value]))
+    lru.set('a', 1)
+    lru.set('b', 2)
+    lru.set('c', 3) // pushes a out
+    lru.set('b', 20) // replaces
+    lru.set('b', 20) // the same value again: nothing leaves
+    expect(evicted).toEqual([
+      ['a', 1],
+      ['b', 2],
+    ])
+    lru.clear()
+    expect(evicted).toHaveLength(2)
+  })
 })

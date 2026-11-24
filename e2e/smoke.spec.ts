@@ -18,8 +18,8 @@ test.describe('app shell and map', () => {
     await expect(page.getByRole('button', { name: 'Zoom in' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Zoom out' })).toBeVisible()
 
-    // Tiles are requested with CORS enabled so the image export can draw them on a canvas.
-    expect(await page.locator('.leaflet-tile-loaded').first().getAttribute('crossorigin')).not.toBeNull()
+    // Tiles are downloaded with CORS and drawn on canvases, with the outlines on the sea hidden (seaOutlines.spec.ts).
+    expect(await page.locator('.leaflet-tile-loaded').first().evaluate((tile) => tile.tagName)).toBe('CANVAS')
     expect(mocks.blocked).toEqual([])
   })
 

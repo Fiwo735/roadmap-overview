@@ -1,7 +1,7 @@
 import { createLru } from '../lib/lru'
-import { loadImage } from '../lib/loadImage'
 import { abortError } from '../lib/requestQueue'
 import { TILE_MAX_ZOOM, TILE_URL } from './config'
+import { loadSeaTile } from './seaTiles'
 
 /** Where a tile is: zoom, column, row (the column already wrapped into the world). */
 export interface TileKey {
@@ -21,8 +21,8 @@ export const tileUrl = ({ z, x, y }: TileKey, template: string = TILE_URL): stri
  * caller caps their number), and requests that are still queued when their render is abandoned are
  * dropped; every tile held in memory so drawing the same view again costs no request, and a tile that
  * failed is not asked for again for `failureTtlMs` — unless the caller asks for a retry (an explicit
- * download). Images are requested `crossOrigin = anonymous`, which the tile server permits, so the
- * canvas they are drawn on stays readable.
+ * download). Tiles are downloaded with CORS, which the tile server permits, so the canvas they are drawn
+ * on stays readable; they come without the outlines on the sea (`seaTiles.ts`).
  */
 export interface TileClient<T> {
   /**
@@ -190,6 +190,7 @@ export function createTileClient<T>({
 }
 
 /** The shared client: tiles are kept (and failures remembered) across renders, so a preview that is redrawn with other options reuses them. */
-export const tileClient: TileClient<HTMLImageElement> = createTileClient({
-  loadImage: (url) => loadImage(url, { crossOrigin: 'anonymous' }),
+export const tileClient: TileClient<CanvasImageSource> = createTileClient<CanvasImageSource>({
+  // The same tiles as the map shows: the standard style without the outlines on the sea (see `seaTiles.ts`).
+  loadImage: (url) => loadSeaTile(url, { readable: true }),
 })

@@ -43,6 +43,10 @@ export interface Mocks {
     peak: number
     /** Make the next tiles fail: an HTTP error, or no answer at all. */
     failWith: 'http-500' | 'network' | null
+    /** Serve this picture for every tile instead of the grey one (a sea with borders on it: `makeSeaTilePng`). */
+    png: Buffer | null
+    /** Whether the tile server lets the page read tiles it fetched (it does). Off: such requests fail, while an <img> still shows the tile. */
+    cors: boolean
   }
   osrm: {
     requests: RecordedRequest[]
@@ -85,13 +89,14 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
     mocks.tiles.peak = Math.max(mocks.tiles.peak, ++mocks.tiles.inFlight)
     try {
       if (mocks.tiles.delayMs > 0) await new Promise((r) => setTimeout(r, mocks.tiles.delayMs))
+      if (!mocks.tiles.cors && route.request().resourceType() === 'fetch') return await route.abort('failed')
       if (mocks.tiles.failWith === 'network') return await route.abort('failed')
       if (mocks.tiles.failWith === 'http-500') return await route.fulfill({ status: 500, headers: CORS, body: 'Internal Server Error' })
       await route.fulfill({
         status: 200,
         contentType: 'image/png',
         headers: { ...CORS, 'cache-control': 'max-age=3600' },
-        body: tile,
+        body: mocks.tiles.png ?? tile,
       })
     } finally {
       mocks.tiles.inFlight--
@@ -149,7 +154,7 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
 
 function freshMocks(): Mocks {
   return {
-    tiles: { requests: 0, urls: [], delayMs: 0, inFlight: 0, peak: 0, failWith: null },
+    tiles: { requests: 0, urls: [], delayMs: 0, inFlight: 0, peak: 0, failWith: null, png: null, cors: true },
     osrm: { requests: [], delayMs: 0, failWith: null },
     nominatim: { requests: [], delayMs: 0, failWith: null },
     blocked: [],

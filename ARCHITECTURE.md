@@ -62,10 +62,14 @@ src/
                              routeSpans (ferry stretches from OSRM steps), legModes / legBadges (legend and badge placement),
                              shareLink (`#trip=` links, the `present` flag), tripFileIo (file names, pretty JSON, text → TripFile),
                              assetUrl (root-relative URLs under the app's base path),
-                             loadImage (an <img> loaded off-page, for canvases)
+                             loadImage (an <img> loaded off-page, for canvases),
+                             seaOutlines (the tiles' borders and outlines on the sea → water colour, on pixels; F9) and
+                             seaOutlinesBitmap (the same on an ImageBitmap, for the page and the worker)
   services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs, sample trip), nominatim.ts, osrm.ts,
                              tripSource.ts (trip files from `?src=` and the sample), tiles.ts (the image export's
-                             tile client: global concurrency, de-duplication, memory cache, failures)
+                             tile client: global concurrency, de-duplication, memory cache, failures),
+                             seaTiles.ts / seaTileProcessor.ts / seaTiles.worker.ts (a tile as the map and the export show
+                             it: downloaded with CORS, borders on the sea hidden in a worker, kept in memory; F9)
   store/                     tripStore (undoable intent), uiStore, routeStore, persistence
   components/                shared UI primitives: Button, IconButton (+Tooltip), Menu, Dialog,
                              ContextMenu (a Menu opened at a point), Toast (+ the `toast` API in
@@ -73,7 +77,8 @@ src/
                              (portal target, modal stack, the map's toast dock)
   features/<name>/           one folder per feature:
     layout/                  TopBar (+ TopBarOverflow on phones), Sidebar, TripTitle, UndoRedoButtons, shortcuts, Logo
-    map/                     MapView, panes, paneLock, mapInstance (getMap/useLeafletMap), view helpers
+    map/                     MapView, panes, paneLock, mapInstance (getMap/useLeafletMap), view helpers,
+                             BasemapLayer + SeaTileLayer (the OSM tiles, drawn on canvases; F9)
     theme/                   ThemeToggle, theme.ts (init/choose)
     places/                  PlacesPanel (sortable list, search), PlacesLayer (markers, context menus)
     legs/                    LegConnector (between place rows: leg summary + the selected leg's LegEditor),
@@ -167,7 +172,7 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 
 | Service | Use | Rules we follow |
 | --- | --- | --- |
-| `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution on the live map (Leaflet's control); on an exported image a credit either drawn in it or posted beside it with the copyright URL (F12); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. The image export (`services/tiles.ts`) only fetches when the user opens the dialog or presses a button, at most 300 tiles per image (the tile zoom is lowered to stay within it; the preview is drawn small, ≈ 20 tiles), **≤ 6 downloads in flight in total** across all renders (a tile of an abandoned preview still on its way counts), one download per URL however many renders want it, requests still queued when their render is abandoned are dropped, tiles kept in memory (220) so redrawing costs no request, and a failed tile is not asked for again for 30 s by previews (an explicit Download / Copy does retry them). |
+| `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution on the live map (Leaflet's control); on an exported image a credit either drawn in it or posted beside it with the copyright URL (F12); tiles are downloaded with `fetch` in CORS mode (`services/seaTiles.ts`, F9: the pixels are read to hide the borders on the sea, and the canvas stays readable for the export), one request per tile, no bulk prefetching, a tile nobody wants any more (it left the view) is aborted, processed tiles are kept in memory (160, an LRU) so a tile seen again is not downloaded or processed again. The image export (`services/tiles.ts`) only fetches when the user opens the dialog or presses a button, at most 300 tiles per image (the tile zoom is lowered to stay within it; the preview is drawn small, ≈ 20 tiles), **≤ 6 downloads in flight in total** across all renders (a tile of an abandoned preview still on its way counts), one download per URL however many renders want it, requests still queued when their render is abandoned are dropped, tiles kept in memory (220) so redrawing costs no request, and a failed tile is not asked for again for 30 s by previews (an explicit Download / Copy does retry them). |
 | `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=true&alternatives=false` (the steps only tell where a route takes a ferry, see F3); one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; geometry simplified (12 m) before caching. |
 | A trip file URL the user gives as `?src=…` (and the bundled `samples/…` on this site) | Opening a trip someone published, e.g. a gist | GET only (`services/tripSource.ts`), http(s) only, no credentials or referrer, 20 s timeout, 20 MB cap; the other server has to allow cross-origin reads (CORS). |
 | `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
@@ -181,6 +186,10 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
   panes are created in `features/map/panes.ts`
   (`PANES.routeCasing | route | rideTrail | routeBadges | via | rideStops | markers | labels | ride`);
   pass the name as the `pane` option of a layer.
+- The base map is `BasemapLayer` → `SeaTileLayer` (`features/map/`, F9): Leaflet's tile layer whose tiles are
+  `<canvas class="leaflet-tile">` elements (not `<img>`), so tests and CSS that look for tiles use `.leaflet-tile` /
+  `.leaflet-tile-loaded` (the classes are Leaflet's own), not `img`. `data-tile-source` says whether a tile was
+  `processed` (borders on the sea hidden) or is the `original` picture (the tile server does not allow CORS reads).
 - Place markers: numbered circular badges (marker pane) with a permanent short label (Leaflet
   tooltip in the labels pane, class `place-label`) beside each. Markers and labels are not themed:
   the tiles are always light, so they stay a white-ringed badge and a light pill on any tile.
@@ -229,7 +238,9 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
 - e2e specs mock tiles, OSRM and Nominatim (`e2e/fixtures.ts`, `e2e/mocks/`), so they run offline
   and never load the public services. The auto-fixture `mocks` also exposes request logs and
   failure switches (`mocks.osrm.failWith = 'NoRoute'`, `delayMs`, …) and aborts any other external
-  request (`mocks.blocked`). `E2E_REAL_NETWORK=1` turns the mocks off.
+  request (`mocks.blocked`). `E2E_REAL_NETWORK=1` turns the mocks off. The tile mock can serve a picture of
+  its own (`mocks.tiles.png = makeSeaTilePng()`: a sea with a border, an outline, a ferry line, land and a label)
+  and refuse CORS reads (`mocks.tiles.cors = false`: `fetch`es of tiles fail, an `<img>` still shows them).
 - The `app` fixture reads and drives the app through `window.__ROADMAP__` (`app.trip()`,
   `app.addPlaces('Lyon', 'Annecy')`, `app.seedSavedTrip(file)`, `app.mapView()`, …). Prefer it
   over clicking through the UI when the UI is not what you are testing.
@@ -252,8 +263,8 @@ Each feature appends a short entry here: what it added, where it lives, anything
 
 - **Shell**: `App.tsx` lays out `TopBar`, `Sidebar` (360px; below 768px a slide-over toggled by
   `ui.sidebarOpen`, closed with Escape/backdrop) and the map. No page scroll; the sidebar scrolls.
-- **Map** (`features/map/`): react-leaflet with OSM tiles (`services/config.ts`), `crossOrigin`
-  tiles, attribution, scale bottom-left, zoom bottom-right. Initial view = fit the restored
+- **Map** (`features/map/`): react-leaflet with OSM tiles (`services/config.ts`; since F9 drawn by `BasemapLayer`
+  / `SeaTileLayer` on canvases instead of `<img>`s), attribution, scale bottom-left, zoom bottom-right. Initial view = fit the restored
   places, else Europe. `MapView` creates the panes before any layer mounts and publishes the map
   through `mapInstance.ts`. `view.ts` has `viewForPlaces()` / `fitMapToPlaces()` for reuse.
 - **Theme**: tokens in `styles/tokens.css`; `index.html` sets `data-theme` before first paint;
@@ -896,8 +907,8 @@ Each feature appends a short entry here: what it added, where it lives, anything
   - The OpenStreetMap credit is drawn only when `credit: 'image'` (F12, below; the first version always drew a plate in the
     bottom-right corner). A tile that cannot be loaded leaves the land colour of the OSM style behind it; the image is still
     made, and the dialog warns.
-- **Tiles** (`services/tiles.ts`, `createTileClient`): one global queue — ≤ 6 downloads in flight in total (`lib/loadImage.ts`,
-  `crossOrigin = anonymous`, 20 s timeout), however many renders ask; in-flight de-duplication (`Map<url, download>`: renders
+- **Tiles** (`services/tiles.ts`, `createTileClient`): one global queue — ≤ 6 downloads in flight in total (`loadSeaTile`, F9:
+  `fetch` with CORS, 20 s timeout; it was `lib/loadImage.ts` with `crossOrigin = anonymous`), however many renders ask; in-flight de-duplication (`Map<url, download>`: renders
   that want the same tile share the download); a render that is abandoned releases its queued requests (a queued download
   nobody waits for is never started), while those already on their way finish and are kept; an LRU of 220 decoded tiles
   kept across renders; failures remembered for 30 s, except that `retryFailed` (passed by Download / Copy as
@@ -1013,6 +1024,81 @@ Each feature appends a short entry here: what it added, where it lives, anything
 - **Known gaps**: the other-tab check compares trips only when a `storage` event arrives (a tab that was asleep sees the toast on its next
   event, not before); two tabs editing the same trip alternately will keep asking each other; presentation mode refits the map when
   toggled, so a hand-made view is not kept; the README screenshots are static and will age with the UI.
+
+### F9 — no borders on the sea
+
+The standard OSM style draws country and maritime borders, the rings of territorial waters and the outlines and glows of marine protected
+areas across the sea. The tiles are pictures, so they are recoloured to the water colour **on the tile's pixels**, on the live map and in the
+exported image (one path for both, so a later video export gets it too). The tile provider and style are unchanged.
+
+- **The function** (`lib/seaOutlines.ts`, framework-free: `hideSeaOutlines(rgba, width, height)` recolours in place and returns how many
+  pixels it changed, 0 = the tile is exactly as it was). Water is #aad3df, a boundary is #8d618b and a protected area #008000 drawn at partial
+  opacity, with a lighter casing at high zooms, so an outline pixel is `water + a·(purple − water) + b·(green − water) + w·(white − water)`;
+  the three coefficients come from inverting a 3 × 3 matrix. Calibrated on ~45 real tiles (zooms 3–16: North Sea, Skagerrak, Baltic, Channel,
+  Adriatic, Aegean, Strait of Bonifacio, Norwegian/Swedish archipelagos, Lake Constance and Geneva, the Wadden Sea): outline pixels have
+  `a` ≤ 1, `b` ≤ 0.75, `w` ≤ 0.36 and are no lighter than the water in any channel; every land colour has `w` ≥ 0.5. Rules, each of them
+  there because a real tile needed it (`hideSeaOutlines` is commented, the constants are named):
+  1. only *outline* pixels change, and only to the water colour; anything lighter than the water (land, a coast's edge, a label's halo) is
+     "in the way": an outline pixel with one within 1 px stays, so coasts, labels and their halos are never touched. **Green outlines and
+     glows** (protected areas: no purple in them and as much red taken out of the pixel as the green takes, which tells them from the sea
+     mixed into a dark-green coast) are the exception: a glow hugs the coast, and half of it left looks like a mistake, so for them land is
+     not in the way — but a label's halo (white over the sea, red ≥ 205), dark text and grey lines still are, as is anything that is not
+     within 6 px of water (rule 3). (Keeping green outlines entirely was the fallback if this could not be made clean; it could);
+  2. ferry lines (more blue than the water) and water labels are neither outline nor in the way — except a pixel that is *a ferry line on an
+     outline* (sea + purple/green + the ferry's #6666ff, at least 0.15 of the pigment): it is recoloured to the sea with the ferry's share
+     of blue, so a ferry along a border keeps its line and loses the dotted dark remnant the mix would leave;
+  3. the outline must be over water: water within 6 px counting through outline pixels (a green line across *tidal flats* is drawn over the
+     flats' colour, which is close to an outline's; erasing it would cut a blue stripe through them);
+  4. an outline pixel inside a solid 11 × 11 block of outline colours belongs to an *area* and everything within 6 px of it stays (widest real
+     outline: 9 px);
+  5. neutral dark grey (a railway tunnel's line, #808080-ish) has the colour of a boundary lying on a protected area, so grey pixels are kept —
+     unless a pixel of a boundary's own casing (purple, no green) is within 2 px, which a tunnel does not have;
+  6. semi-transparent pixels are left alone.
+  Boundaries that run *along* the coast stay as the faint dotted outline they are on the land side. A pass takes 2–4 ms for a 256 px tile; a
+  second pass changes (almost) nothing. Real tiles used as fixtures: `lib/fixtures/tiles/` (with an attribution README), read by a small PNG
+  decoder in the tests (`lib/fixtures/decodePng.ts`).
+- **Getting tiles** (`services/seaTiles.ts`, `seaTileProcessor.ts`, `seaTiles.worker.ts`, `lib/seaOutlinesBitmap.ts`): `loadSeaTile(url,
+  { signal?, readable? })` → `ImageBitmap | HTMLImageElement`. `fetch` in CORS mode (20 s timeout, credentials omitted; one request per tile,
+  the same URLs as before) → the bytes go to a **module Web Worker** that decodes them (`createImageBitmap` with no colour management),
+  runs `hideSeaOutlines` on an `OffscreenCanvas` and sends the bitmap back (the *same* decoded bitmap when there was nothing to hide).
+  No Worker or OffscreenCanvas, or the worker broke (`onerror`, an unreadable message) or does not answer a tile within 5 s
+  (`WORKER_TIMEOUT_MS`; every tile it owes then goes to the page): the same on the page, and the worker is not used again; pixels
+  unreadable: the plain decoded tile. Processed bitmaps are kept in an LRU of 160 (about 40 MB), so a tile that comes back costs no
+  request and no pass; one pushed out is `close()`d unless a `readable` caller (the export, which keeps its tiles) has it; concurrent
+  callers share one download, which is aborted when the last of them gives up. A browser that refuses the bytes (no CORS) makes the
+  screen fall back to the plain `<img>` (shown, but unreadable) — and, once such a picture has loaded, remembers the *origin*: its later
+  tiles are loaded plainly with one request each (the first batch is asked for twice; a network error does not count, the picture must
+  load); a caller that will read the picture back (`readable`, the export) gets the error instead, i.e. a missing tile, as before. HTTP
+  errors and timeouts are errors in both cases (no second request).
+- **Live map** (`features/map/SeaTileLayer.ts`, mounted by `BasemapLayer`; `MapView` no longer has react-leaflet's `TileLayer`): a
+  `TileLayer` subclass whose `createTile` returns a `<canvas>` (sized by the picture, so any retina scheme would work; `detectRetina` is not
+  used) and calls Leaflet's `done` when it is drawn, so fade-in, `leaflet-tile-loaded`, `tileerror`, attribution and the grid are Leaflet's.
+  Tiles dropped by the map (`tileunload`, `tileabort`) abort their download. Leaflet's own `_abortLoading` tells loaded tiles of
+  other zooms from loading ones with `img.complete`, which a canvas does not have, so it would throw away every old tile on a zoom: it is
+  overridden to use Leaflet's own `loaded` mark (`seaOutlines.spec.ts` guards it). `data-tile-source="processed" | "original"` is on every tile.
+- **Export** (`services/tiles.ts`): the shared `tileClient` is now `TileClient<CanvasImageSource>` and loads through `loadSeaTile(url,
+  { readable: true })`; the 6-at-a-time queue, de-duplication, the 220-tile memory and the failure memory are unchanged and still sit on top.
+- **Shared-file edits** (additive): `lib/lru.ts` (`createLru(limit, onEvict?)`), `e2e/fixtures.ts` (`mocks.tiles.png`, `mocks.tiles.cors`), `e2e/mocks/tiles.ts` (`makeSeaTilePng`,
+  `SEA_TILE`), `e2e/smoke.spec.ts` (tiles are canvases now), `MapView.tsx`, `services/tiles.ts`, README (a "quiet sea" section, the tile row).
+  `types/trip.ts` is unchanged, and so is the Help dialog (nothing new to do).
+- **Tests**: Vitest — the function on ten real tiles (only outline pixels change and only to water; nothing next to land, a label or a
+  halo; land untouched; no outline left in open water, 500+ before and ≤ 20 after; the tunnel; the flats; ferry lines and halos; the
+  borders on land; a ferry line lying on a border leaves no mixed pixels — `z8-138-93-adriatic` — and keeps its line; green is gone from
+  the water, also along coasts and between islands — Stockholm, Bonifacio, the Adriatic island) and on drawn pictures (every rule above, tile
+  edges, odd sizes, `Uint8Array`), the loader (cache and its limit, closing of pushed-out bitmaps, sharing, abort of one or all callers, CORS
+  fallback on the screen and not for a readable picture, an origin that refuses CORS asked once per tile, HTTP errors, the timeout) and the
+  processor (worker, no worker, a broken worker, a silent one with fake timers, an unreadable message, a tile that cannot be sent,
+  unreadable pixels, `OffscreenCanvas` missing; fakes for the browser's pieces).
+  `e2e/seaOutlines.spec.ts` (mocked): pixels of a live tile (boundary, casing and outline gone; ferry, land, the border on land, halo and
+  text kept), with the Worker removed or one that never answers, a tile the page may not read (and one request per later tile), tiles that fail (no hole filled in, no retry), tiles not fetched
+  twice when the map comes back, old tiles kept during an animated zoom, and the export preview with the same tile.
+- **Known gaps**: a boundary lying along the coast keeps its faint outline on the land side (there is no telling it from the coast);
+  green glow *on the islands themselves* (over land) and a few specks where it meets islet edges stay, and a second pass would still take
+  about a hundred pixels off the widest glows (nothing runs it); the green italic *names* of
+  protected areas stay (as do the purple names of states and countries on the sea) — they are labels, and they are what is left of the
+  area; a tunnel is cut by about 6 px where a boundary crosses it; a tile server with another water colour (another style) hides nothing;
+  Firefox with fingerprinting protection returns noisy canvas pixels, so tiles there are shown unprocessed or slightly noisy; the live
+  map's first tiles arrive one worker round trip later than an `<img>` would (a few ms).
 
 ### F12 — the OpenStreetMap credit on exported images
 

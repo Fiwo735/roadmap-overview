@@ -104,6 +104,14 @@ one asks, when the first saves a different trip, whether to load it or keep its 
 
 The theme follows your system and can be switched with the moon/sun button; the map tiles always keep the standard OpenStreetMap style.
 
+### A quiet sea
+
+The standard OpenStreetMap style draws country and maritime borders and the outlines of marine protected areas right across the sea, which
+only distracts from a trip. The app recolours them to the colour of the water, on the map and in exported images. Coastlines, land borders,
+ferry lines, names and everything else stay as they are. It is done on the tile pictures themselves
+([`src/lib/seaOutlines.ts`](src/lib/seaOutlines.ts)), so it needs no other tile provider, and it only knows the standard style's colours: with
+another tile server (`TILE_URL`) nothing is hidden.
+
 ![The sample trip in the dark theme](docs/screenshots/dark.png)
 
 ### Help
@@ -227,7 +235,7 @@ tile provider) by editing that file and rebuilding.
 
 | Service | Used for | Policy and what the app does |
 | --- | --- | --- |
-| **OpenStreetMap tiles**, `tile.openstreetmap.org` | The map (and the exported image) | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): visible attribution (always shown on the map; for an exported image either drawn in it or, by default, as a caption beside it that includes openstreetmap.org/copyright, as the [attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines) require), no bulk downloading (an image export fetches only the tiles of its own picture, at most 300 and six at a time, and keeps them in memory), and no heavy use: a busy site should use its own tile server or a commercial provider and change `TILE_URL`. |
+| **OpenStreetMap tiles**, `tile.openstreetmap.org` | The map (and the exported image) | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): visible attribution (always shown on the map; for an exported image either drawn in it or, by default, as a caption beside it that includes openstreetmap.org/copyright, as the [attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines) require), no bulk downloading (an image export fetches only the tiles of its own picture, at most 300 and six at a time, and keeps them in memory), and no heavy use: a busy site should use its own tile server or a commercial provider and change `TILE_URL`. Tiles are downloaded with CORS (the server allows it) so their pixels can be read to hide the borders on the sea; processed tiles are kept in memory (160), so a tile you come back to is neither downloaded nor processed again. |
 | **OSRM demo server**, `router.project-osrm.org` | Road routes between places | [Demo server policy](https://github.com/Project-OSRM/osrm-backend/wiki/Demo-server): light use only, no guarantees. The app sends at most one request at a time and one per second, never repeats a request (results are cached and saved with the trip) and does not retry in a loop: a failed leg shows a *Retry* button. For regular use run your own [OSRM](https://github.com/Project-OSRM/osrm-backend) (`OSRM_URL`, driving profile). |
 | **Nominatim**, `nominatim.openstreetmap.org` | Place search and naming dropped pins | [Usage policy](https://operations.osmfoundation.org/policies/nominatim/): at most one request per second, no search-as-you-type, cache results, identify the application. The app searches only on Enter or the search button, queues requests one per second, caches answers and sends the browser's own `Referer`. Self-host it or use a geocoding service with a compatible `/search` and `/reverse` API (`NOMINATIM_URL`) for more. |
 

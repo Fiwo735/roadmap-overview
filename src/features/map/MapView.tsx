@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import { AttributionControl, MapContainer, ScaleControl, TileLayer, ZoomControl, useMap } from 'react-leaflet'
+import { AttributionControl, MapContainer, ScaleControl, ZoomControl, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { TILE_ATTRIBUTION, TILE_MAX_ZOOM, TILE_URL } from '../../services/config'
+import { TILE_MAX_ZOOM } from '../../services/config'
 import { useTripStore } from '../../store/tripStore'
 import { PlacesLayer } from '../places/PlacesLayer'
 import { PresentationLayer } from '../presentation/PresentationLayer'
 import { RouteLayer } from '../routing/RouteLayer'
 import { RouteManager } from '../routing/RouteManager'
 import { RideLayer } from '../ride/RideLayer'
+import { BasemapLayer } from './BasemapLayer'
 import { MapOverlays } from './MapOverlays'
 import { ensurePanes } from './panes'
 import { setMapInstance } from './mapInstance'
@@ -53,7 +54,7 @@ export function MapView() {
         worldCopyJump
       >
         <MapSetup />
-        <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} maxZoom={TILE_MAX_ZOOM} crossOrigin="anonymous" />
+        <BasemapLayer />
         <AttributionControl position="bottomright" prefix={false} />
         <ZoomControl position="bottomright" />
         <ScaleControl position="bottomleft" imperial={false} />
