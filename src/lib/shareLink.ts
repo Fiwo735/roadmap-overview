@@ -1,5 +1,6 @@
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string'
 import type { TripFile } from '../types/trip'
+import { withoutPhotos } from './photos'
 
 /** Share links carry the trip in the URL hash: `https://app/#trip=<compressed TripFile>`. */
 export const SHARE_HASH_PREFIX = '#trip='
@@ -41,10 +42,11 @@ export function wantsPresentation(search: string, hash: string): boolean {
 
 /**
  * `#trip=…` for `file`. Cached routes are left out: they are big, and the receiving app derives
- * them again (the link stays short, the file is the way to share routes).
+ * them again (the link stays short, the file is the way to share routes). Photos are left out too,
+ * references included (F11): a link cannot carry their bytes, the JSON file does.
  */
 export function encodeShareHash(file: TripFile, { present = false } = {}): string {
-  const { routes: _routes, ...withoutRoutes } = file
+  const { routes: _routes, ...withoutRoutes } = withoutPhotos(file)
   return SHARE_HASH_PREFIX + compressToEncodedURIComponent(JSON.stringify(withoutRoutes)) + (present ? `&${PRESENT_FLAG}` : '')
 }
 

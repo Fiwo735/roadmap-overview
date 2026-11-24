@@ -15,7 +15,7 @@ const TOPICS: { id: string; title: string; items: string[] }[] = [
     title: 'Add and arrange places',
     items: [
       'Type a place in the “Add a place…” box under the list and press Enter, then pick a result. Or right-click (long-press on a phone) the map and choose “Add place here”; “Insert place here” puts it into the route where you clicked.',
-      'Drag a place by its grip (⋮⋮) to reorder, or drag its marker on the map to move it. Click a place to change its location with a new search, rename it, or add a note.',
+      'Drag a place by its grip (⋮⋮) to reorder, or drag its marker on the map to move it. Click a place to change its location with a new search, rename it, add a note or add photos (pick them, or drop image files on its Photos area).',
       'The number on the right of each place is its day of travel. Places on the same day are driven the same day; leave gaps for rest days. The trip’s length, the ride and the dates all follow these numbers.',
     ],
   },
@@ -32,6 +32,7 @@ const TOPICS: { id: string; title: string; items: string[] }[] = [
     title: 'Show it',
     items: [
       'The card on the map shows the title, dates, distance, driving time and the countries you pass. Click the title to edit it.',
+      'Click a place’s marker on the map to open its card: the day and date, the note and the photos you added. Click a photo to see it large and flip through the others (← →). Photos are only shown there, never on the map itself.',
       'Ride plays the trip as a little vehicle driving day by day; Space pauses it and the arrow keys jump between days.',
       'Choose the vehicle with the arrow next to Ride: a campervan, a black Iveco Daily, a retro bus, a motorhome, a car with a caravan or a 4×4 with a roof tent, most of them in a colour of your choice. It is part of the trip, so it is saved and shared with it, and new trips start with the vehicle you chose last. You cannot change it while a ride runs or in presentation mode.',
       'Presentation mode (P) hides the sidebar and every editing tool, which is what you want for showing a trip to others. Esc leaves it.',
@@ -44,6 +45,7 @@ const TOPICS: { id: string; title: string; items: string[] }[] = [
     items: [
       'Your trip is saved in this browser automatically. File → Save as JSON downloads it as a file; File → Open trip file (or dropping the file on the page) brings it back.',
       'File → Copy share link puts the whole trip into a link; “Copy presentation link” makes one that opens in presentation mode. Anything you replace stays under File → Recent trips.',
+      'Photos are saved inside the JSON file (File → Save as JSON), so the file can get big; share links cannot carry them.',
     ],
   },
 ]

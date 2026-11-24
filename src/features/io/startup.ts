@@ -1,4 +1,5 @@
 import { toast } from '../../components/toast'
+import { withoutPhotos } from '../../lib/photos'
 import { decodeShareHash, isShareHash, wantsPresentation } from '../../lib/shareLink'
 import { parseTripFile } from '../../lib/tripFile'
 import { parseTripJson } from '../../lib/tripFileIo'
@@ -33,7 +34,8 @@ function openShareHash(hash: string, atStart: boolean): void {
     toast.error(`Could not open the shared trip. ${parsed.error}`)
     return
   }
-  openLinkedTrip(parsed.file, parsed.warnings, { atStart })
+  // A link never carries photos (see `encodeShareHash`): references in a hand-made one would only dangle.
+  openLinkedTrip(withoutPhotos(parsed.file), parsed.warnings, { atStart })
 }
 
 /** Load the trip file at `?src=<url>` (asynchronous; the address is cleaned at once). */
@@ -55,6 +57,7 @@ async function openSource(src: string): Promise<void> {
       toast.error(`Could not open the trip from ${host}. ${parsed.error}`)
       return
     }
+    // A published trip file may carry photos: they are stored when (and only when) the trip is opened.
     if (useTripStore.getState().trip !== tripAtStart) offerLinkedTrip(parsed.file, parsed.warnings, host)
     else openLinkedTrip(parsed.file, parsed.warnings)
   } catch (err) {

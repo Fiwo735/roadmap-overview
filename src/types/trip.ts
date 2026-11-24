@@ -33,6 +33,22 @@ export interface Place {
   customName?: boolean
   /** Free-text note. */
   note?: string
+  /**
+   * Photos of the place, in the order shown (optional, added without a version bump). The trip only
+   * holds references: the image bytes live in the browser's IndexedDB (src/services/photoDb.ts) and travel
+   * inside saved JSON files (`TripFile.photos`), never in autosave, recent trips or share links.
+   */
+  photos?: PlacePhoto[]
+}
+
+/** A reference to a photo of a place. `width` x `height` are the stored (already rotated and downscaled) pixels. */
+export interface PlacePhoto {
+  /** Key of the bytes in IndexedDB and in `TripFile.photos`. */
+  id: string
+  width: number
+  height: number
+  /** Optional caption, shown under the photo in the viewer. */
+  caption?: string
 }
 
 /** How a leg is travelled. Only 'drive' is routed over roads; the rest are drawn by hand. */
@@ -129,4 +145,19 @@ export interface TripFile {
    * key recomputed from the trip; otherwise the leg is routed again.
    */
   routes?: Record<string, LegRoute>
+  /**
+   * Optional (added without a version bump): the full-size bytes of the photos the trip's places refer to
+   * (`Place.photos`), keyed by `PlacePhoto.id`. Only JSON files saved from the File menu carry them;
+   * autosave, recent trips and share links hold references only. Thumbnails are derived again on import.
+   */
+  photos?: Record<string, TripFilePhoto>
+}
+
+/** One embedded photo of a trip file. */
+export interface TripFilePhoto {
+  mime: 'image/jpeg'
+  /** Base64 (no `data:` prefix) of the JPEG. */
+  data: string
+  width: number
+  height: number
 }

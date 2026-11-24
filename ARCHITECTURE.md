@@ -65,11 +65,13 @@ src/
                              loadImage (an <img> loaded off-page, for canvases),
                              seaOutlines (the tiles' borders and outlines on the sea → water colour, on pixels; F9) and
                              seaOutlinesBitmap (the same on an ImageBitmap, for the page and the worker)
+                             photos (photo rules: sizes, limits, batch planning, garbage selection, embedding in files; F11)
   services/                  ALL network access: config.ts (tile/OSRM/Nominatim URLs, sample trip), nominatim.ts, osrm.ts,
                              tripSource.ts (trip files from `?src=` and the sample), tiles.ts (the image export's
                              tile client: global concurrency, de-duplication, memory cache, failures),
                              seaTiles.ts / seaTileProcessor.ts / seaTiles.worker.ts (a tile as the map and the export show
-                             it: downloaded with CORS, borders on the sea hidden in a worker, kept in memory; F9)
+                             it: downloaded with CORS, borders on the sea hidden in a worker, kept in memory; F9),
+                             photoDb.ts is storage, not network: the IndexedDB store of photo bytes (F11)
   store/                     tripStore (undoable intent), uiStore, routeStore, persistence
   components/                shared UI primitives: Button, IconButton (+Tooltip), Menu, Dialog,
                              ContextMenu (a Menu opened at a point), Toast (+ the `toast` API in
@@ -96,6 +98,9 @@ src/
     help/                    HelpDialog (how-tos + the shortcut table in `shortcutList.ts`), HelpButton, `?` key
                              (`helpActions`), WelcomeHint (first-visit card, `welcomeStore`) (F8)
     presentation/            presentationStore, PresentationButton (+ `usePresentationKeys`), PresentationLayer (F8)
+    photos/                  photos of places (F11): PlacePhotos (the expanded row's Photos area), addPhotos + processImage
+                             (decode, shrink, store), photoActions, MapPlaceCard (the card over a clicked marker) and
+                             PhotoLightbox (the viewer), placeCardStore, photoUrls, photoFile (embedding/importing), photoGc
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
@@ -161,9 +166,11 @@ See `src/types/trip.ts`. Key rules:
   `localStorage["roadmap-overview:theme"]`. The trips that something replaced (a link, a file, the
   sample, "New trip") go to a ring of up to five in `localStorage["roadmap-overview:v1:recent"]`
   (`store/recentTrips.ts`, F5).
+- **Photo bytes** live in IndexedDB (database `roadmap-overview`, store `photos`, `services/photoDb.ts`, F11), never in the trip,
+  the undo history, the autosave, the recent trips or a share link: those hold `Place.photos` references only.
 - **Debug hook.** In dev builds `window.__ROADMAP__` exposes the stores (`trip`, `ui`, `routes`,
-  each a Zustand store; `trip.temporal` is the undo history), `getMap()` (the Leaflet map) and, once the
-  top bar has mounted, `ride` (the ride's store and controls, F6) so Playwright and humans can inspect
+  each a Zustand store; `trip.temporal` is the undo history), `getMap()` (the Leaflet map), `photos` (`collectGarbage()` for the
+  photo store, F11) and, once the top bar has mounted, `ride` (the ride's store and controls, F6) so Playwright and humans can inspect
   and drive state programmatically. Stripped from production.
 
 ## External services (and their usage policies)
@@ -194,7 +201,9 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
   tooltip in the labels pane, class `place-label`) beside each. Markers and labels are not themed:
   the tiles are always light, so they stay a white-ringed badge and a light pill on any tile.
   Crowded labels give way to each other (`features/places/labelLayout.ts`); adding the class
-  `hide-place-labels` to the map container hides all labels but the hovered/selected one.
+  `hide-place-labels` to the map container hides all labels but the hovered/selected one. A click on a
+  marker also opens the place's **card** (F11, `features/photos/MapPlaceCard.tsx`): a themed React overlay anchored to the marker with
+  its day/date, note and photos, closed by ✕, Escape, an empty-map click or another selection.
 - Route styling comes from `MODES` (`src/lib/modes.ts`) through `features/routing/legStyle.ts`: a
   darker casing under the line, thicker when hovered/selected; legs still routing show a thin grey
   dashed straight placeholder, failed ones a red dashed line, straight drive legs a dotted line.
@@ -964,7 +973,8 @@ Each feature appends a short entry here: what it added, where it lives, anything
   that collapses with a draft saves it; at most 1000 characters). A note shows as a small icon on its row (`place-note-indicator`,
   the note as its `title`) and **in the marker's label**: the permanent label is a name plus a `.place-label__note` that CSS shows
   only while the label is hovered or selected (`is-hovered`/`is-selected`), turning the pill into a card; the marker's aria-label
-  includes the note. (There is no second Leaflet tooltip: a marker has one, and it already is the label.)
+  includes the note. (There is no second Leaflet tooltip: a marker has one, and it already is the label.) Since F11 a click on the marker opens
+  the place card, which carries the note, and the label then stays a plain pill (`is-carded`) until the card is closed.
 - **Toasts** (`components/Toast.tsx`, `portal.ts`, `map/MapOverlays.tsx`): on screens ≥ 768 px the toast region is portalled into a
   **toast dock** — the first child of the bottom-centre map slot, i.e. stacked directly above the ride controls, clear of the title
   card (top-left), the map tools (top-right) and the legend (bottom-left). Inside an open dialog it still goes into the dialog; on
@@ -1142,6 +1152,115 @@ exported image (one path for both, so a later video export gets it too). The til
   (real fixture through `page.route`): stub cut from the cached route, distance reduced, handle drawn on the line.
 - **Known gaps**: the 1 km limit is a judgement call; U-shaped detours between parallel roads remain; a hybrid laptop shows the selected
   leg's handles after a touch until the next mouse move on the map; keyboard-only users still cannot add or move via points.
+
+### F11 — photos for places
+
+- **Contract** (additive, file version stays 1): `Place.photos?: PlacePhoto[]` (`{ id, width, height, caption? }`, the order is the order
+  shown) and `TripFile.photos?: Record<id, { mime: 'image/jpeg', data: <base64>, width, height }>`. The trip only ever holds the
+  *references*; `parseTripFile` repairs them (bad entries and repeated ids dropped, ≤ 50 per place, ≤ 300 per trip, one warning each) and
+  validates the embedded records: only JPEG-looking base64 (`/9j/`) of at most 14 M characters, sane integer sizes, and only ids that a
+  place refers to; the rest is dropped with a count in the warnings. It does not decode the bytes (see `photoFile.ts`).
+  `sanitizePlacePatch` accepts `photos` (cleaned; empty = key removed) and `tripStore.updatePlace` caps it so the whole trip stays within
+  300, so a 51st photo for a place or a 301st for a trip cannot enter by any route. Everything photo-related that is pure is in `lib/photos.ts`.
+- **Where the bytes are** (`services/photoDb.ts`): `PhotoStore` (`put` — an id that is stored already is kept —, `get`, `has`, `list` without reading
+  the photos (a key cursor on the `createdAt` index, plus each photo's garbage-collection mark), `markUnreferenced` / `clearUnreferenced`,
+  `delete`); `createIndexedDbPhotoStore()` is the real one (database version 2: the stores `photos` and `unreferenced` — the marks —, created on
+  upgrade if missing; opened lazily; it closes itself on a `versionchange` and opens again after the browser closed it (`onclose`); a `blocked`
+  open fails at once and a connection that arrives afterwards is closed, not leaked; errors become `PhotoStoreError` with a sentence for the
+  user: no room / the browser refuses site storage here (SecurityError, InvalidStateError: "private browsing or blocked site data can cause
+  that") / anything else with the error's name — "private browsing" is not claimed for every failure);
+  `createMemoryPhotoStore()` serves unit tests; `getPhotoStore()` / `setPhotoStore()` is the one the app uses. Record: `{ id, blob (JPEG ≤ 2048
+  px), thumb (JPEG ≈ 320 px), width, height, createdAt }`. A photo this browser does not have (IndexedDB cleared, a trip that came without its
+  file) shows a placeholder, never a broken image or an exception.
+- **Adding** (`features/photos/`): `PlacePhotos` is the *Photos* area under the note in the expanded row: "Add photos" (a hidden multiple file
+  input, `accept="image/*"`) and drag-and-drop of image files onto the area (its `onDrop` only claims drops that contain images, so a `.json`
+  dropped there is still the window's trip drop). `addPhotos(placeId, files)` plans the batch (`planBatch`: not-an-image, empty, > 30 MB and
+  the surplus beyond the free slots are rejected, each with a reason), then, one file at a time and one batch at a time (a promise queue:
+  decoding a dozen 12-megapixel pictures at once would need gigabytes), runs `processImage`: `createImageBitmap(file, { imageOrientation:
+  'from-image' })` (EXIF applied; the metadata, GPS included, is gone because the pixels are re-encoded), drawn onto a canvas (white under
+  transparency), ≤ 2048 px, JPEG 0.85, then a ≈ 320 px thumbnail made from that. Each result is stored at once (memory stays flat) and the batch
+  becomes **one** `updatePlace` = one undo step. An unreadable file (a HEIC outside Safari is named as such) is reported in one toast and the
+  rest is added; a storage failure ends the batch with its own message but keeps what was stored. Progress ("Adding photo 3 of 12…") comes from
+  `usePhotoJobs`. If editing is locked meanwhile (ride, presentation) or the place disappears, the batch is not applied (its bytes become
+  garbage). `photoActions.ts`: remove (the × on a tile), move earlier/later (arrows; *no drag reordering*: the arrows are keyboard
+  accessible, and a second dnd context inside a sortable row was not worth the risk), caption (committed on Enter/blur as one step; a
+  half-typed caption survives the row closing; Escape discards it): each is one undo step and ignored while `isEditingLocked()`.
+  The collapsed row shows a photo count (`place-photos-indicator`) beside the note icon.
+- **Viewing** (`MapPlaceCard.tsx`, `PhotoLightbox.tsx`, `placeCardStore.ts`): a click on a marker (or Enter on a focused one, which then moves the
+  focus into the card and gives it back on close) selects the place *and* opens its **card**: a React overlay in `.map-overlays` (not a
+  Leaflet popup) with the numbered badge, the name, "Day 3 · Fri 17 Jul 2026" (the effective day; the date only when the trip has a start
+  date), the note and up to eight thumbnails (the eighth says "+N"; a single photo is shown large). It sits above the marker, or below when
+  there is no room (on a phone, where the title card is a pill across the top and the map tools beside it, "room" means clear of those: a
+  card never covers them), is clamped into the map and follows the marker on pan/resize (a zoom animation hides it until `zoomend`; a marker that is
+  scrolled out of view takes its card with it). It closes with its ✕, Escape (a document-capture handler, so it comes *before* presentation
+  mode's Escape, and only when the key is not a field's, a menu's or a dialog's), a click on the empty map, another place being selected, the
+  place being deleted, the marker being dragged, or a ride starting. Selecting a place in the **list** does not open a card: only the map does.
+  **Not during a ride** (the camera moves under it and the ride has its own HUD); it works in presentation mode, which is its main use. The
+  marker's *label* stops showing the note while its card is open (`is-carded`: the card has it); hovering still shows the note in the label.
+  A thumbnail opens the viewer: a modal `<dialog>` portalled to the body (dark in both themes) with the photo large (the thumbnail blurred
+  underneath until the big one has loaded), the caption, "2 / 12", previous/next buttons, ←/→, a horizontal swipe (≥ 48 px and mostly
+  horizontal; the click that ends a drag does not close it), Esc / ✕ / a click beside the photo to close, and the neighbours preloaded.
+  `photoUrls.ts`: object URLs are shared and reference-counted, and revoked 30 s after their last user (`usePhotoUrl(id, 'thumb' | 'full')`).
+- **Saving and opening** (`photoFile.ts`, `lib/photos.ts`): *Save as JSON* is async now: `currentTripFile()` is taken at once (what was typed is in
+  it), then `tripFileBlob` reads each referenced photo from IndexedDB and builds the text *in pieces* (`tripFileTextParts`: the pretty-printed
+  file with `photos` last, each photo's base64 made in 3·256 KB chunks from its Blob, so no 100 MB string ever exists) for `new Blob(parts)`.
+  Photos this browser no longer has — or whose bytes cannot be read (`blob.arrayBuffer()` rejecting is caught per photo, before the file's text
+  is made, so the references of a skipped photo are left out as well) — are left out of the file, and a toast says how many; the save still
+  happens, and `saveTripFile` catches everything else too ("Could not save the trip file") because its callers do not wait for it. Without
+  photos the output is byte for byte what it was. Opening (`storePhotosOf`): every embedded JPEG is first bounded by what it *declares to decode
+  to* (`readJpegSize` reads the frame header: wider or taller than 16 384 px or more than 64 megapixels is refused before anything is decoded),
+  then decoded once (`describeJpeg`: its true, oriented size and a new thumbnail; one beyond 2048 px is shrunk and re-encoded like an added
+  photo), stored with `overwrite: false`, and only then is the trip installed; the references get the stored size (`withPhotoSizes`), not the
+  one the file claimed. References to photos that are neither in the file nor in this browser are removed, and the notes ("2 photos in the file
+  were damaged or too large and were left out.") join the parser's warnings in the opening toast. The returned file has no `photos` any more, so
+  the base64 does not linger in memory. `storePhotosOf` also returns `added`, the ids it newly put in storage; when the trip is then **not**
+  opened — the confirm to replace the open trip is answered no, or editing got locked while a big file was read (`openTripText`) — they are
+  `discardPhotos`-ed again. A linked file (`?src=`) is not prepared in advance: `openLinkedTrip` stores its photos in the moment it installs the
+  trip (also from the "Open linked trip (anyway)" toast actions), so an offer nobody answers leaves nothing behind. **Share links**: `encodeShareHash` strips embedded bytes *and* references (`withoutPhotos`), `openShareHash`
+  strips them again on the way in, and the share toast says "Photos are not part of links: save the JSON file …" when the trip has photos.
+  Autosave and recent trips keep references only (their fingerprints include them, so a photo change is a change). The image export (F7) ignores photos.
+- **Garbage collection** (`photoGc.ts`, `lib/photos.ts` `planGarbage`): deliberately slow, because this tab cannot see what other tabs still need
+  (their undo history, a trip they have not saved yet). A sweep (`collectPhotoGarbage()`) works out which stored photos something still refers
+  to — the open trip, **every state of this page's undo/redo history** (so an Undo, also the Undo toast of "New trip", finds its bytes), the trip
+  in the autosave slot, every recent trip (read raw from localStorage, deliberately more inclusive than the validated list; when storage cannot be
+  read nothing happens) — and then: a photo nothing refers to is **only marked** with the time of the sweep (store `unreferenced`); a marked photo
+  that is referenced again loses its mark; a photo that has stayed unreferenced for **7 days** (`GC_TTL_MS`, counted from its mark) is deleted,
+  with its mark. A clock set back deletes nothing. A tab that is still open sweeps again every 30 minutes (`GC_INTERVAL_MS`), which keeps the
+  marks of the photos *its* history needs cleared, so another tab's sweep cannot get them to their week; only a tab that sleeps for more than a
+  week while another one sweeps can lose a photo from its undo history (it then shows the "not available" placeholder). Sweeps run 8 s after
+  start-up, 8 s after the trip id changes (`bootstrap.keepPhotosTidy`, one timer) and on that interval; tests call
+  `window.__ROADMAP__.photos.collectGarbage({ now })` (two sweeps a week apart) instead of waiting.
+- **Drops**: `DropOverlay` no longer shows "Drop to open trip" for a drag that carries only images (the types are known during the drag), and an
+  image dropped anywhere else gets a hint toast ("To add photos, open a place in the list and drop them on its Photos area.") instead of
+  "Could not open photo.png" (that F5 e2e test was updated); a drop that a photo area has taken (`defaultPrevented`) is ignored by the window.
+- **Changed elsewhere**: `PlacesLayer` (click → `openPlaceCard`, Enter on a marker, `is-carded`, the card closes on `dragstart`), `PlaceRow`
+  (indicator and `PlacePhotos`), `places.css`, `MapOverlays` (mounts `PlaceCardHost` and `PhotoViewerHost`), `exportTrip.ts` (async save, share
+  toast), `importTrip.ts` / `startup.ts` (`storePhotosOf`), `bootstrap.ts` (GC, debug hook), `shortcutList.ts`, `HelpDialog.tsx`, README.
+  `e2e/notes.spec.ts` ("show in the marker label while it is hovered or selected") now expects the card to carry the note after a click.
+- **Tests**: Vitest — `lib/photos.test.ts` (resize maths and its boundaries, reference cleaning, limits and slots, batch planning, problem texts,
+  garbage selection, base64/chunking, the assembled file parses back, share links carry nothing), `lib/tripFilePhotos.test.ts`
+  (parse/validate/limits/warnings), `store/tripStorePhotos.test.ts` (patches, undo, the 300 cap), `features/photos/*.test.ts` (`addPhotos`
+  with fake decoding and the memory store: one step, partial failure, quota, locks, queueing, progress; `photoActions`; `photoGc`;
+  `photoFile`: embedding, unreadable/missing/damaged/oversized photos, true sizes, `added` and `discardPhotos`, storage failure; `photoUrls`:
+  shared reference-counted object URLs; `planGarbage` and the marking sweeps in `lib/photos.test.ts` / `photoGc.test.ts`; `readJpegSize`),
+  `features/io/importTripPhotos.test.ts` (the photos are stored before the trip is installed, and taken out again when it is not opened; a linked
+  file's photos only when it is installed; the 150 MB limit for a picked file). The
+  JPEG/EXIF pipeline needs a browser, so it is covered by Playwright
+  (`e2e/photos.spec.ts`, `photoCard.spec.ts`, `photoFiles.spec.ts`; mocked services; images made on the fly by `e2e/mocks/images.ts`: PNGs in Node,
+  JPEGs and the EXIF Orientation tag): add through the picker (one undo step, redo), a 3000×1500 JPEG → 2048×1024 and a sideways 40×20
+  JPEG with EXIF 6 → 20×40, the progress line of a big batch, bad files, reorder/caption/remove/undo, the 50 cap, drops (on the area, elsewhere, a JSON on the area), the ride
+  lock; the card (content, anchoring, following the map, every way to close it, no card from the list, "+N", missing bytes, none during a
+  ride, Enter and focus), the viewer (counter, captions, buttons, ←/→, swipe, Esc, ✕, backdrop), presentation mode (the layers peel off one Escape
+  at a time, nothing editable); Save as JSON embeds the photos and opening that file after wiping IndexedDB and localStorage restores them
+  (card, viewer, reload); damaged/stray/missing photos in a file; a photo whose bytes cannot be read (a stubbed rejecting `arrayBuffer`: the file is
+  still saved, with a warning); an embedded 4000×3000 photo shrunk on opening and a header declaring 30 000×30 000 refused; a share link without
+  photos and its notice; GC (mark first, delete a week later, referenced-again, recent trips, undo history, the start-up sweep); the card on a
+  phone staying clear of the trip pill and the map tools.
+- **Known gaps**: photos cannot be reordered by dragging; the input of *Add photos* is capped by bytes (30 MB), not pixels, so a 100-megapixel PNG can still
+  use a lot of memory while it is decoded (a photo embedded in a file *is* bounded by its pixels); files with photos are big (≈ 0.5 MB per photo, a third more as base64) and are read into memory
+  when opened (a picked or dropped file may be up to 150 MB, `MAX_PICKED_TRIP_FILE_BYTES` — about 250 photos, what a phone can read into memory; a published
+  `?src=` file is still limited to 20 MB, which fits only a few photos); photos nothing refers to stay in the browser for a week; the
+  viewer cannot zoom into a photo; the card's thumbnails are cropped squares, not the photos' own proportions.
 
 ### F12 — the OpenStreetMap credit on exported images
 

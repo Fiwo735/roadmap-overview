@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { divIcon, marker as leafletMarker, type LeafletMouseEvent, type Marker } from 'leaflet'
+import { divIcon, marker as leafletMarker, type LeafletKeyboardEvent, type LeafletMouseEvent, type Marker } from 'leaflet'
 import { useMap } from 'react-leaflet'
 import { ListPlus, MapPinPlus, Pencil, Trash2 } from 'lucide-react'
 import { ContextMenu } from '../../components/ContextMenu'
 import type { MenuEntry } from '../../components/Menu'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
+import { closePlaceCard, openPlaceCard, usePlaceCardStore } from '../photos/placeCardStore'
 import { usePresentationStore } from '../presentation/presentationStore'
 import { isEditingLocked } from '../ride/rideStore'
 import type { LatLng, Place } from '../../types/trip'
@@ -64,6 +65,7 @@ function sameSpot(marker: Marker, place: Place): boolean {
 /** Mirror the shared hover/selection state onto every marker and its label. */
 function applyEmphasis(entries: Map<string, Entry>): void {
   const { hoveredPlaceId, selectedPlaceId } = useUiStore.getState()
+  const cardPlaceId = usePlaceCardStore.getState().placeId
   for (const [id, { marker }] of entries) {
     const hovered = id === hoveredPlaceId
     const selected = id === selectedPlaceId
@@ -71,6 +73,8 @@ function applyEmphasis(entries: Map<string, Entry>): void {
     marker.getElement()?.classList.toggle('is-selected', selected)
     marker.getTooltip()?.getElement()?.classList.toggle('is-hovered', hovered)
     marker.getTooltip()?.getElement()?.classList.toggle('is-selected', selected)
+    // The place card (F11) shows the note: the label then stays a plain pill.
+    marker.getTooltip()?.getElement()?.classList.toggle('is-carded', id === cardPlaceId)
     marker.setZIndexOffset(selected ? 2000 : hovered ? 1000 : 0)
   }
 }
@@ -140,7 +144,17 @@ export function PlacesLayer() {
         live.set(place.id, created)
         const id = place.id
 
-        m.on('click', () => useUiStore.getState().selectPlace(id))
+        // Selecting also opens the place's card (name, day, note, photos) over the map; Enter does the same from the keyboard.
+        m.on('click', () => {
+          useUiStore.getState().selectPlace(id)
+          openPlaceCard(id)
+        })
+        m.on('keydown', (e: LeafletKeyboardEvent) => {
+          if (e.originalEvent.key !== 'Enter') return
+          e.originalEvent.preventDefault()
+          useUiStore.getState().selectPlace(id)
+          openPlaceCard(id, { byKeyboard: true, returnFocus: () => m.getElement()?.focus() })
+        })
         // A tap also produces compatibility mouse events, but no mouseout until the next tap
         // elsewhere: only a real mouse hovers.
         m.on('mouseover', () => {
@@ -152,6 +166,7 @@ export function PlacesLayer() {
         m.on('dragstart', () => {
           created.dragging = true
           setMenu(null)
+          closePlaceCard()
           useUiStore.getState().selectPlace(id)
         })
         m.on('dragend', () => {
@@ -200,8 +215,12 @@ export function PlacesLayer() {
     const unsubscribe = useUiStore.subscribe((state, prev) => {
       if (state.hoveredPlaceId !== prev.hoveredPlaceId || state.selectedPlaceId !== prev.selectedPlaceId) applyEmphasis(live)
     })
+    const unsubscribeCard = usePlaceCardStore.subscribe((state, prev) => {
+      if (state.placeId !== prev.placeId) applyEmphasis(live)
+    })
     return () => {
       unsubscribe()
+      unsubscribeCard()
       cancelAnimationFrame(layoutFrame.current)
       layoutFrame.current = 0
       for (const entry of live.values()) entry.marker.remove()

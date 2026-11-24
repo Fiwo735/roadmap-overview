@@ -2,6 +2,7 @@ import { toast } from './components/toast'
 import { startCrossTabSync } from './features/io/crossTab'
 import { openTripFromAddress } from './features/io/startup'
 import { getMap } from './features/map/mapInstance'
+import { collectPhotoGarbage, GC_INTERVAL_MS, photosDebug, schedulePhotoGc } from './features/photos/photoGc'
 import { initTheme } from './features/theme/theme'
 import { restoreSavedTrip, startAutosave } from './store/persistence'
 import { useRouteStore } from './store/routeStore'
@@ -28,6 +29,18 @@ function keepSelectionValid(): void {
   })
 }
 
+/**
+ * Photo bytes that no trip refers to any more are deleted (F11), a week after they were first found unreferenced: the sweep runs shortly
+ * after start-up, after another trip replaced the open one, and every half hour (which keeps the photos this tab's undo history needs marked as in use).
+ */
+function keepPhotosTidy(): void {
+  schedulePhotoGc()
+  setInterval(() => void collectPhotoGarbage(), GC_INTERVAL_MS)
+  useTripStore.subscribe((state, prev) => {
+    if (state.trip.id !== prev.trip.id) schedulePhotoGc()
+  })
+}
+
 /** Everything that must be in place before the first render: theme, saved trip, autosave, shared trip, debug hook. */
 export function bootstrap(): void {
   initTheme()
@@ -43,8 +56,9 @@ export function bootstrap(): void {
   keepSelectionValid()
   // After autosave started, so that a trip opened from the address is saved as the current one.
   openTripFromAddress()
+  keepPhotosTidy()
 
   if (import.meta.env.DEV) {
-    window.__ROADMAP__ = { trip: useTripStore, ui: useUiStore, routes: useRouteStore, getMap }
+    window.__ROADMAP__ = { trip: useTripStore, ui: useUiStore, routes: useRouteStore, getMap, photos: photosDebug }
   }
 }

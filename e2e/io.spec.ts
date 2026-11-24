@@ -525,9 +525,16 @@ test.describe('drag and drop', () => {
     await page.dispatchEvent('body', 'drop', { dataTransfer: dt })
     await expect(toasts(page)).toContainText('Could not open holiday.json. This is not a Roadmap Overview trip file.')
 
+    const other = await fileDrag(page, 'archive.zip', 'binary', 'application/zip')
+    await page.dispatchEvent('body', 'drop', { dataTransfer: other })
+    await expect(toasts(page).last()).toContainText('Could not open archive.zip.')
+    await expect(page.getByTestId('drop-overlay')).toHaveCount(0)
+
+    // A picture is not a trip either, but it is not an error: photos go into a place (F11, see photos.spec.ts).
     const photo = await fileDrag(page, 'photo.png', 'binary', 'image/png')
+    await page.dispatchEvent('body', 'dragenter', { dataTransfer: photo })
     await page.dispatchEvent('body', 'drop', { dataTransfer: photo })
-    await expect(toasts(page).last()).toContainText('Could not open photo.png.')
+    await expect(toasts(page).last()).toContainText('To add photos, open a place in the list')
     await expect(page.getByTestId('drop-overlay')).toHaveCount(0)
   })
 })

@@ -3,6 +3,7 @@ import { create, useStore } from 'zustand'
 import type { LatLng, Leg, Place, Trip, VehicleKind } from '../types/trip'
 import { isLat, isLng, isValidLatLng } from '../lib/geo'
 import { newId } from '../lib/id'
+import { capForTrip } from '../lib/photos'
 import {
   createTrip,
   defaultDayAt,
@@ -192,7 +193,12 @@ export const useTripStore = create<TripState>()(
           edit((t) => {
             const i = t.places.findIndex((p) => p.id === id)
             if (i < 0) return null
-            const next = applyPatch<Place>(t.places[i], sanitizePlacePatch(patch))
+            const clean = sanitizePlacePatch(patch)
+            if (clean.photos) {
+              const capped = capForTrip(t, id, clean.photos)
+              clean.photos = capped.length > 0 ? capped : undefined
+            }
+            const next = applyPatch<Place>(t.places[i], clean)
             if (next === t.places[i]) return null
             const places = t.places.slice()
             places[i] = next

@@ -1,6 +1,8 @@
 import { useToastDock } from '../../components/portal'
 import { WelcomeHint } from '../help/WelcomeHint'
 import { LegLegend } from '../legs/LegLegend'
+import { PhotoViewerHost } from '../photos/PhotoLightbox'
+import { PlaceCardHost } from '../photos/MapPlaceCard'
 import { StatsOverlay } from '../stats/StatsOverlay'
 import { MapTools } from '../routing/MapTools'
 import { RideHud } from '../ride/RideHud'
@@ -35,6 +37,9 @@ export function MapOverlays() {
         />
         <RideHud />
       </div>
+      {/* The card of a clicked place and its photo viewer (F11). */}
+      <PlaceCardHost />
+      <PhotoViewerHost />
     </div>
   )
 }

@@ -1,6 +1,7 @@
-import type { LatLng, Leg, LegRoute, Place, Trip, TripFile } from '../types/trip'
+import type { LatLng, Leg, LegRoute, Place, Trip, TripFile, TripFilePhoto } from '../types/trip'
 import { haversineM, isValidLatLng, pathLengthM } from './geo'
 import { newId } from './id'
+import { cleanPhotoList, isJpegBase64, MAX_FILE_PHOTO_DIMENSION, MAX_PHOTOS_PER_TRIP } from './photos'
 import { decodePolylineUncached } from './polyline'
 import { legRouteKey } from './routeKey'
 import { areValidSpans } from './routeSpans'
@@ -112,6 +113,11 @@ function parsePlaces(raw: unknown, warnings: string[]): Place[] {
     if (typeof item.address === 'string' && item.address) place.address = item.address
     if (item.customName === true) place.customName = true
     if (typeof item.note === 'string' && item.note) place.note = item.note
+    if (item.photos !== undefined) {
+      const { photos, dropped } = cleanPhotoList(item.photos)
+      if (photos.length > 0) place.photos = photos
+      if (dropped > 0) warnings.push(`${label}: ${dropped} photo reference${dropped === 1 ? ' was' : 's were'} invalid and ${dropped === 1 ? 'was' : 'were'} dropped.`)
+    }
     places.push(place)
   })
   return places
@@ -233,7 +239,54 @@ function parseTrip(raw: unknown, warnings: string[]): Trip {
   if (typeof raw.startDate === 'string' && isCalendarDate(raw.startDate)) trip.startDate = raw.startDate
   const vehicle = parseVehicle(raw.vehicle, warnings)
   if (vehicle) trip.vehicle = vehicle
+  limitTripPhotos(trip, warnings)
   return trip
+}
+
+/** A trip refers to at most `MAX_PHOTOS_PER_TRIP` photos: later places lose the surplus. */
+function limitTripPhotos(trip: Trip, warnings: string[]): void {
+  let room = MAX_PHOTOS_PER_TRIP
+  let dropped = 0
+  for (const place of trip.places) {
+    if (!place.photos) continue
+    if (place.photos.length > room) {
+      dropped += place.photos.length - room
+      if (room > 0) place.photos = place.photos.slice(0, room)
+      else delete place.photos
+    }
+    room -= place.photos?.length ?? 0
+  }
+  if (dropped > 0) warnings.push(`A trip holds at most ${MAX_PHOTOS_PER_TRIP} photos; ${dropped} were dropped.`)
+}
+
+const isDimension = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= MAX_FILE_PHOTO_DIMENSION
+
+/**
+ * The embedded photos of a file: only JPEGs that a place refers to, with sane sizes. Everything else is
+ * dropped and counted in one warning. The bytes themselves are not decoded here (see features/photos/photoFile.ts).
+ */
+function parsePhotos(raw: unknown, trip: Trip, warnings: string[]): Record<string, TripFilePhoto> {
+  const out: Record<string, TripFilePhoto> = {}
+  if (raw === undefined) return out
+  if (!isRecord(raw)) {
+    warnings.push('The photos of the file were not readable and were left out.')
+    return out
+  }
+  const wanted = new Set(trip.places.flatMap((p) => (p.photos ?? []).map((photo) => photo.id)))
+  let unused = 0
+  let invalid = 0
+  for (const [id, item] of Object.entries(raw)) {
+    if (!wanted.has(id)) {
+      unused++
+    } else if (isRecord(item) && item.mime === 'image/jpeg' && isJpegBase64(item.data) && isDimension(item.width) && isDimension(item.height)) {
+      out[id] = { mime: 'image/jpeg', data: item.data, width: item.width, height: item.height }
+    } else {
+      invalid++
+    }
+  }
+  if (invalid > 0) warnings.push(`${invalid} photo${invalid === 1 ? ' in the file was' : 's in the file were'} damaged or too large and ${invalid === 1 ? 'was' : 'were'} left out.`)
+  if (unused > 0) warnings.push(`${unused} photo${unused === 1 ? '' : 's'} in the file belonged to no place and ${unused === 1 ? 'was' : 'were'} left out.`)
+  return out
 }
 
 /**
@@ -288,11 +341,10 @@ export function parseTripFile(input: unknown): ParseTripFileResult {
         ? input.exportedAt
         : new Date().toISOString()
 
-    return {
-      ok: true,
-      warnings,
-      file: { format: TRIP_FILE_FORMAT, version: TRIP_FILE_VERSION, exportedAt, trip, routes },
-    }
+    const file: TripFile = { format: TRIP_FILE_FORMAT, version: TRIP_FILE_VERSION, exportedAt, trip, routes }
+    const photos = parsePhotos(input.photos, trip, warnings)
+    if (Object.keys(photos).length > 0) file.photos = photos
+    return { ok: true, warnings, file }
   } catch (err) {
     if (err instanceof FileError) return { ok: false, error: err.message }
     throw err

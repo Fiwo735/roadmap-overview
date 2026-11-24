@@ -1,7 +1,8 @@
 import { toast, type ToastOptions } from '../../components/toast'
+import { photoIdsOfTrip } from '../../lib/photos'
 import { tripFingerprint } from '../../lib/recentTrips'
 import { parseTripJson } from '../../lib/tripFileIo'
-import { fetchTripText, MAX_TRIP_FILE_BYTES, TripSourceError } from '../../services/tripSource'
+import { fetchTripText, TripSourceError } from '../../services/tripSource'
 import { SAMPLE_TRIP_URL } from '../../services/config'
 import { findRecentTrip, pushRecentTrip, removeRecentTrip } from '../../store/recentTrips'
 import { useRouteStore } from '../../store/routeStore'
@@ -9,6 +10,7 @@ import { clearHistory, undo, useTripStore } from '../../store/tripStore'
 import { withPreferredVehicle } from '../../store/vehiclePreference'
 import type { Trip, TripFile } from '../../types/trip'
 import { getMap } from '../map/mapInstance'
+import { discardPhotos, storePhotosOf } from '../photos/photoFile'
 import { editingLockedReason } from '../ride/rideStore'
 import { fitMapToTrip } from '../routing/mapFit'
 import { askToConfirm } from './confirm'
@@ -91,18 +93,39 @@ export async function openTripText(text: string, name: string, { withPreferredVe
     return false
   }
   if (usePreference) parsed.file.trip = withPreferredVehicle(parsed.file.trip)
-  if (!(await replaceOpenTrip(parsed.file, name))) return false
-  const { title, places } = parsed.file.trip
-  toast.success(`Opened ${quoted(title)} (${placesText(places.length)}).${repairNote(parsed.warnings)}`, {
+  // The photos a file carries go into the browser's storage before the trip that refers to them is opened (F11);
+  // when the trip is not opened after all, the ones that were just stored go again.
+  const { file, notes, added } = await storePhotosOf(parsed.file)
+  const warnings = [...parsed.warnings, ...notes]
+  const locked = editingLockedReason()
+  if (locked) {
+    // Reading a big file takes a while: presentation mode or a ride may have begun meanwhile.
+    void discardPhotos(added)
+    toast.info(`${name} was not opened. ${locked}`)
+    return false
+  }
+  if (!(await replaceOpenTrip(file, name))) {
+    void discardPhotos(added)
+    return false
+  }
+  const { title, places } = file.trip
+  toast.success(`Opened ${quoted(title)} (${placesText(places.length)}).${repairNote(warnings)}`, {
     action: undoAction,
-    duration: parsed.warnings.length > 0 ? 9_000 : undefined,
+    duration: warnings.length > 0 ? 9_000 : undefined,
   })
   return true
 }
 
+/**
+ * The biggest trip file the user can pick or drop. A file saved with photos (F11) holds a few hundred of them at around
+ * 0.5 MB each, so this is far above the 20 MB that a trip file fetched from a web address may be (`?src=`, unchanged),
+ * yet small enough for a phone to read into memory.
+ */
+export const MAX_PICKED_TRIP_FILE_BYTES = 150 * 1024 * 1024
+
 /** Open a file the user picked or dropped. */
 export async function openTripFileFromDisk(file: File): Promise<void> {
-  if (file.size > MAX_TRIP_FILE_BYTES) {
+  if (file.size > MAX_PICKED_TRIP_FILE_BYTES) {
     toast.error(`Could not open ${file.name}. The file is too large to be a trip.`)
     return
   }
@@ -165,6 +188,9 @@ function announceLinkedTrip(file: TripFile, warnings: string[], kept: boolean): 
  */
 export function openLinkedTrip(file: TripFile, warnings: string[], { atStart = false } = {}): void {
   const kept = keepOpenTrip(file.trip)
+  // A linked file may carry photos (`?src=`): they are stored only when the trip is really opened, so a toast
+  // that is never answered leaves nothing behind. (Links themselves carry none, and are opened without waiting.)
+  const withPhotos = photoIdsOfTrip(file.trip).size > 0
   if (kept === 'failed') {
     toast.info(
       `A linked trip, ${quoted(file.trip.title)}, is ready, but this browser has no room to keep a copy of your open trip. Opening it replaces that trip for good.`,
@@ -172,8 +198,11 @@ export function openLinkedTrip(file: TripFile, warnings: string[], { atStart = f
         action: {
           label: 'Open linked trip anyway',
           onClick: () => {
-            installTrip(file)
-            announceLinkedTrip(file, warnings, false)
+            if (withPhotos) void installLinkedWithPhotos(file, warnings, false)
+            else {
+              installTrip(file)
+              announceLinkedTrip(file, warnings, false)
+            }
           },
           blockedBy: editingLockedReason,
         },
@@ -182,9 +211,20 @@ export function openLinkedTrip(file: TripFile, warnings: string[], { atStart = f
     )
     return
   }
+  if (withPhotos) {
+    void installLinkedWithPhotos(file, warnings, kept === 'kept')
+    return
+  }
   installTrip(file)
   if (atStart) clearHistory()
   announceLinkedTrip(file, warnings, kept === 'kept')
+}
+
+/** `openLinkedTrip`'s last step for a file with photos: they are stored first, then the trip is installed. */
+async function installLinkedWithPhotos(file: TripFile, warnings: string[], kept: boolean): Promise<void> {
+  const prepared = await storePhotosOf(file)
+  installTrip(prepared.file)
+  announceLinkedTrip(prepared.file, [...warnings, ...prepared.notes], kept)
 }
 
 /** A linked trip that arrived after the user had started editing: ask before replacing their work. */

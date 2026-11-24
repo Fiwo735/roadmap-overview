@@ -1,10 +1,12 @@
 import { toast } from '../../components/toast'
 import { buildShareUrl, isLongShareLink, isOpenableShareLink } from '../../lib/shareLink'
 import { collectLegRoutes, serializeTripFile } from '../../lib/tripFile'
-import { stringifyTripFile, tripFileName } from '../../lib/tripFileIo'
+import { tripFileName } from '../../lib/tripFileIo'
+import { tripPhotoCount } from '../../lib/photos'
 import { useRouteStore } from '../../store/routeStore'
 import { useTripStore } from '../../store/tripStore'
 import type { TripFile } from '../../types/trip'
+import { tripFileBlob } from '../photos/photoFile'
 
 /** The current trip as a file, with the cached routes of its current legs unless `withRoutes` is false. */
 export function currentTripFile(withRoutes = true): TripFile {
@@ -14,8 +16,8 @@ export function currentTripFile(withRoutes = true): TripFile {
 
 const hasPlaces = (): boolean => useTripStore.getState().trip.places.length > 0
 
-function download(text: string, name: string, type: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type }))
+function download(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
   link.download = name
@@ -27,15 +29,26 @@ function download(text: string, name: string, type: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
-/** Save the trip, routes included, as `<title>.trip.json`. */
-export function saveTripFile(): void {
+/** Save the trip, routes and photos included, as `<title>.trip.json`. */
+export async function saveTripFile(): Promise<void> {
   if (!hasPlaces()) {
     toast.info('There is nothing to save yet. Add a place first.')
     return
   }
   const name = tripFileName(useTripStore.getState().trip.title)
-  download(stringifyTripFile(currentTripFile()), name, 'application/json')
-  toast.success(`Saved ${name}`)
+  // The photos' bytes are read from the browser's storage (F11), so this waits a moment.
+  const file = currentTripFile()
+  try {
+    const { blob, missing } = await tripFileBlob(file)
+    download(blob, name)
+    toast.success(`Saved ${name}`)
+    if (missing > 0) {
+      toast.error(`${missing} photo${missing === 1 ? '' : 's'} could not be read from this browser and ${missing === 1 ? 'was' : 'were'} left out of the file.`, { duration: 9_000 })
+    }
+  } catch {
+    // Callers do not wait for this: whatever goes wrong has to be said here.
+    toast.error('Could not save the trip file. Please try again.')
+  }
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -78,11 +91,15 @@ export async function copyShareLink({ present = false } = {}): Promise<void> {
     toast.error('Your browser did not allow copying to the clipboard.')
     return
   }
+  // Links carry no photos (their bytes do not fit); the JSON file does.
+  const photoNote = tripPhotoCount(useTripStore.getState().trip) > 0 ? ' Photos are not part of links: save the JSON file (File → Save as JSON) to share them.' : ''
   if (isLongShareLink(url)) {
     toast.info(
-      `Link copied, but it is very long (${url.length.toLocaleString('en-US')} characters) and some apps may cut it off. Sharing the JSON file (File → Save as JSON) is safer.`,
+      `Link copied, but it is very long (${url.length.toLocaleString('en-US')} characters) and some apps may cut it off. Sharing the JSON file (File → Save as JSON) is safer.${photoNote}`,
       { duration: 12_000 },
     )
+  } else if (photoNote) {
+    toast.info(`${present ? 'Presentation link' : 'Share link'} copied to the clipboard.${photoNote}`, { duration: 10_000 })
   } else {
     toast.success(present ? 'Presentation link copied to the clipboard.' : 'Share link copied to the clipboard.')
   }

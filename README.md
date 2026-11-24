@@ -35,7 +35,14 @@ Try it with the bundled sample trip: **File → Load sample trip**.
 - **Days.** The *Day* field of a place is the day of travel on which you reach it. Days drive the trip length, the dates and the ride;
   leave gaps for rest days.
 - **Click a place** to expand it: search for a different location, rename it, or write a **note** (opening hours, what to see, where to
-  park). A note shows as a small icon on its row and in the label on the map while you hover or select the marker.
+  park). A note shows as a small icon on its row and in the label on the map while you hover the marker.
+- **Photos.** The expanded row has a *Photos* area: *Add photos* (several at once) or drop image files on it. Photos are shrunk to at most
+  2048 px and stored as JPEG in your browser (IndexedDB; the camera's metadata, GPS included, is not kept); a place holds up to 50 and a
+  trip up to 300. Select a thumbnail to caption it or change its order, × removes it; every change is one undo step. The row shows the
+  number of photos. HEIC pictures work only where the browser can decode them (Safari); elsewhere convert them to JPEG first.
+- **Click a marker** on the map to open the place's **card**: its day and date, the note and the photo thumbnails, anchored to the marker.
+  Click a thumbnail to see the photo large and flip through the others (← → or swipe, Esc closes). Photos show nowhere else on the map, and
+  the card also works in presentation mode. (It does not open during a ride.)
 
 ### Routes
 
@@ -144,6 +151,9 @@ the places list is a slide-over from the button at the top-left.
 | `Space`, `↑` `↓`, `Space` / `Esc` | On a row's grip: pick the place up, move it, drop it / put it back |
 | `Delete` | On a focused route handle: remove it |
 | `Esc` | While dragging a route line: cancel the reshape |
+| `Enter` | On a focused marker: open the place card |
+| `Esc` | Close the photo viewer, then the place card |
+| `←` `→` | In the photo viewer: previous or next photo |
 | `←` `↑` `→` `↓`, `+` `-` | Pan and zoom the map (when it has the focus) |
 | `Space` | Ride: play or pause |
 | `←` `→` | Ride: previous or next day |
@@ -178,6 +188,10 @@ A trip is saved as a JSON file (`*.trip.json`). The format is the **data contrac
 }
 ```
 
+- **Photos** (optional, no version bump): `place.photos` lists `{ id, width, height, caption? }` references; a file saved with
+  *Save as JSON* also has a top-level `photos` object, `{ "<id>": { "mime": "image/jpeg", "data": "<base64>", "width": …, "height": … } }`,
+  with the full-size JPEGs. Opening the file stores them in the browser (thumbnails are made again). Files with photos are big (roughly
+  0.5 MB per photo). Autosave, recent trips and share links keep only the references, and links drop even those.
 - **Intent and derived data are kept apart.** `trip` is what you edit (places, legs, via points, days, notes). `routes` is an optional
   cache of the road geometry, keyed by leg id; the app only trusts a cached route whose `key` matches the trip, otherwise it routes the leg
   again. A file without `routes` opens fine and is routed on arrival.
@@ -192,10 +206,11 @@ A trip is saved as a JSON file (`*.trip.json`). The format is the **data contrac
 ## Sharing
 
 - **JSON file**: *File → Save as JSON* (`Ctrl+S`) downloads it, *File → Open trip file…* (`Ctrl+O`) or dropping the file on the page opens
-  it. The file carries the routes, so it opens instantly. This is the safest way to share a long trip.
+  it. The file carries the routes and the photos, so it opens instantly. This is the safest way to share a long trip, and the only way to
+  share photos.
 - **Share link**: *File → Copy share link* puts the whole trip, without its routes, compressed into the address
   (`https://…/#trip=<data>`); whoever opens it gets the trip (and the routes are computed again). Very long links (over about 8 000
-  characters) may be cut off by chat apps, and the app says so.
+  characters) may be cut off by chat apps, and the app says so. **Links do not carry photos**: the toast says so, and the JSON file does.
 - **Presentation link**: *File → Copy presentation link* is the same with `&present` appended: it opens in presentation mode, with no
   editing tools. `?present` in the address does the same for the trip already in the browser, and `?src=…&present` for a trip file.
 - **`?src=<url>`**: opens a trip file from a web address, for example one published as a GitHub gist or next to the app

@@ -2,6 +2,7 @@ import type { Leg, LegMode, Place, Trip } from '../types/trip'
 import { isLat, isLng, isValidLatLng } from './geo'
 import { newId } from './id'
 import { MODE_ORDER } from './modes'
+import { cleanPhotoList } from './photos'
 
 export const DEFAULT_TRIP_TITLE = 'My campervan trip'
 
@@ -111,7 +112,7 @@ export type LegPatch = Partial<Omit<Leg, 'id' | 'fromId' | 'toId'>>
  * Reduce an update to values that keep a Place valid, dropping the rest: required fields (name,
  * lat, lng, day) are never deleted or set to junk, and a coordinate update with any invalid half is
  * dropped as a whole so a place is never moved to half a position. Optional fields (address, note,
- * customName) are cleared by `undefined` or an empty value. Unknown keys, including `id`, are ignored.
+ * customName, photos) are cleared by `undefined` or an empty value. Unknown keys, including `id`, are ignored.
  */
 export function sanitizePlacePatch(patch: PlacePatch): PlacePatch {
   const out: PlacePatch = {}
@@ -131,6 +132,11 @@ export function sanitizePlacePatch(patch: PlacePatch): PlacePatch {
   if ('customName' in patch) {
     if (patch.customName === true) out.customName = true
     else if (patch.customName === false || patch.customName === undefined) out.customName = undefined
+  }
+  if ('photos' in patch) {
+    // References only (F11): unusable entries and repeated ids go, an empty list removes the key.
+    const { photos } = cleanPhotoList(patch.photos)
+    out.photos = photos.length > 0 ? photos : undefined
   }
   return out
 }

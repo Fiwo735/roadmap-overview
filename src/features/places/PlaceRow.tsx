@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { EllipsisVertical, GripVertical, LocateFixed, Pencil, StickyNote, Trash2 } from 'lucide-react'
+import { EllipsisVertical, GripVertical, Image as PhotoIcon, LocateFixed, Pencil, StickyNote, Trash2 } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { IconButton } from '../../components/IconButton'
 import { Menu, type MenuEntry } from '../../components/Menu'
@@ -10,6 +10,7 @@ import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
 import type { Place } from '../../types/trip'
 import { LegConnector } from '../legs/LegConnector'
+import { PlacePhotos } from '../photos/PlacePhotos'
 import { useRideStore } from '../ride/rideStore'
 import { DayField } from './DayField'
 import { PlaceNote } from './PlaceNote'
@@ -199,6 +200,13 @@ export function PlaceRow({ place, index, isLast, earlierThan }: PlaceRowProps) {
                   <span className="sr-only">Has a note</span>
                 </span>
               ) : null}
+              {place.photos?.length ? (
+                <span className="place-row__photos" data-testid="place-photos-indicator" title={`${place.photos.length} photo${place.photos.length === 1 ? '' : 's'}`}>
+                  <PhotoIcon size={13} aria-hidden="true" />
+                  {place.photos.length}
+                  <span className="sr-only"> {place.photos.length === 1 ? 'photo' : 'photos'}</span>
+                </span>
+              ) : null}
             </button>
           )}
           {addressTip.tooltip}
@@ -251,6 +259,7 @@ export function PlaceRow({ place, index, isLast, earlierThan }: PlaceRowProps) {
               testId="row-search"
             />
             <PlaceNote placeId={place.id} note={place.note ?? ''} placeName={name} onEscape={collapse} />
+            <PlacePhotos place={place} placeName={name} />
           </div>
         ) : null}
       </div>

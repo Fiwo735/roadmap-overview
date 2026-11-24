@@ -20,7 +20,7 @@ export function useFileShortcuts(): void {
       if (key === 's') {
         // A field being edited (the title, a day) commits when it loses focus: save what the user typed.
         if (isTextEntry(e.target)) (e.target as HTMLElement).blur()
-        saveTripFile()
+        void saveTripFile()
       } else if (!isEditingLocked()) {
         // Opening another trip replaces this one: not while presenting or riding.
         pickTripFile()

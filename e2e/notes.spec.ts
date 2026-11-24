@@ -140,9 +140,18 @@ test.describe('place notes', () => {
     await expect(labels.locator('.place-label__note')).toBeHidden()
     await expect(page.locator('.leaflet-tooltip.place-label.is-hovered')).toContainText('Annecy')
 
-    // Selecting the place (a click on its marker, as a tap does on a phone) shows it as well.
+    // Selecting the place (a click on its marker, as a tap does on a phone) opens its card (F11), which shows
+    // the note; the label does not say it twice.
     await page.mouse.click(at.x, at.y)
     await page.mouse.move(at.x + 300, at.y + 200)
+    await expect(page.getByTestId('place-card-note')).toHaveText('Try the bouchons.')
+    await expect(labels.locator('.place-label__note')).toBeHidden()
+    // The card follows edits of the note ...
+    await page.evaluate(([id]) => window.__ROADMAP__!.trip.getState().updatePlace(id, { note: 'Open late.' }), [lyon])
+    await expect(page.getByTestId('place-card-note')).toHaveText('Open late.')
+    // ... and when it is closed the selected place shows its note in the label as before.
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('place-card')).toHaveCount(0)
     await expect(labels.locator('.place-label__note')).toBeVisible()
 
     // Editing the note updates the label.
