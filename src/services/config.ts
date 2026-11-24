@@ -7,9 +7,6 @@ export const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 export const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
 
-/** Plain-text form of the attribution, for the exported image. */
-export const TILE_ATTRIBUTION_TEXT = '© OpenStreetMap contributors'
-
 export const TILE_MAX_ZOOM = 19
 
 /** OSRM demo server. Used as `${OSRM_URL}/route/v1/driving/{lng,lat;lng,lat}`. */

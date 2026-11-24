@@ -163,7 +163,7 @@ All network calls go through `src/services/*`; components never call `fetch` dir
 
 | Service | Use | Rules we follow |
 | --- | --- | --- |
-| `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution (map and exported image); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. The image export (`services/tiles.ts`) only fetches when the user opens the dialog or presses a button, at most 300 tiles per image (the tile zoom is lowered to stay within it; the preview is drawn small, ≈ 20 tiles), **≤ 6 downloads in flight in total** across all renders (a tile of an abandoned preview still on its way counts), one download per URL however many renders want it, requests still queued when their render is abandoned are dropped, tiles kept in memory (220) so redrawing costs no request, and a failed tile is not asked for again for 30 s by previews (an explicit Download / Copy does retry them). |
+| `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles, image export | Visible "© OpenStreetMap contributors" attribution on the live map (Leaflet's control); on an exported image a credit either drawn in it or posted beside it with the copyright URL (F12); `crossOrigin` enabled so tiles can be drawn on canvas; no bulk prefetching. The image export (`services/tiles.ts`) only fetches when the user opens the dialog or presses a button, at most 300 tiles per image (the tile zoom is lowered to stay within it; the preview is drawn small, ≈ 20 tiles), **≤ 6 downloads in flight in total** across all renders (a tile of an abandoned preview still on its way counts), one download per URL however many renders want it, requests still queued when their render is abandoned are dropped, tiles kept in memory (220) so redrawing costs no request, and a failed tile is not asked for again for 30 s by previews (an explicit Download / Copy does retry them). |
 | `https://router.project-osrm.org/route/v1/driving/…` | Road routing of drive legs | `overview=full&geometries=polyline&steps=true&alternatives=false` (the steps only tell where a route takes a ferry, see F3); one request per leg (from, via…, to); one `lib/requestQueue.ts` queue (≤ 1 request in flight, ≥ 1 s between starts, identical requests shared, requests nobody waits for any more dropped or aborted, 20 s timeout); results cached by key; geometry simplified (12 m) before caching. |
 | A trip file URL the user gives as `?src=…` (and the bundled `samples/…` on this site) | Opening a trip someone published, e.g. a gist | GET only (`services/tripSource.ts`), http(s) only, no credentials or referrer, 20 s timeout, 20 MB cap; the other server has to allow cross-origin reads (CORS). |
 | `https://nominatim.openstreetmap.org/search` and `/reverse` | Place search, naming dropped pins | **No search-as-you-type** (policy): search on Enter/button only. ≤ 1 request/s globally (one queue for both endpoints, `lib/requestQueue.ts`), identical in-flight requests shared, LRU result cache, 15 s timeout. `format=jsonv2&addressdetails=1`; `/search` limit 8 plus an unbounded `viewbox` of the visible map, `/reverse` zoom 14. |
@@ -846,7 +846,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   a `size="xl"` (940 px). Preview on the left, controls on the right (stacked below 768 px): size preset (Landscape
   1920 × 1080, Portrait 1080 × 1350, Square 1080 × 1080, Print A4 landscape 3508 × 2480), resolution (1× / 2× sharper),
   switches (title and statistics card, place names, day numbers, legend — the legend one is disabled, with a hint, unless
-  two or more modes are in use) and card style (Match app / Light / Dark). The choices live in `exportStore.ts`
+  two or more modes are in use), card style (Match app / Light / Dark) and the map credit (beside the image / small in it: F12). The choices live in `exportStore.ts`
   (`localStorage["roadmap-overview:export-options"]`, repaired field by field by `sanitizeOptions`). "Download PNG" saves
   `<slug>.png` (`exportFilename`: the trip title, accents dropped); "Copy image" is
   `navigator.clipboard.write([new ClipboardItem({ 'image/png': promise })])` with the render passed as a promise (Safari
@@ -889,8 +889,9 @@ Each feature appends a short entry here: what it added, where it lives, anything
     keep counting east past 180°, the live map draws such a trip in two pieces); `flagImages.ts` loads a flag with its
     viewBox size written on it (Firefox and Safari cannot draw an SVG without a size on a canvas); `paint.ts` has the
     canvas painters; `fonts.ts` waits for Inter (a canvas does not); `deliver.ts` has the download and clipboard code.
-  - Always drawn: "© OpenStreetMap contributors" in the bottom-right corner (`TILE_ATTRIBUTION_TEXT`). A tile that cannot be
-    loaded leaves the land colour of the OSM style behind it; the image is still made, and the dialog warns.
+  - The OpenStreetMap credit is drawn only when `credit: 'image'` (F12, below; the first version always drew a plate in the
+    bottom-right corner). A tile that cannot be loaded leaves the land colour of the OSM style behind it; the image is still
+    made, and the dialog warns.
 - **Tiles** (`services/tiles.ts`, `createTileClient`): one global queue — ≤ 6 downloads in flight in total (`lib/loadImage.ts`,
   `crossOrigin = anonymous`, 20 s timeout), however many renders ask; in-flight de-duplication (`Map<url, download>`: renders
   that want the same tile share the download); a render that is abandoned releases its queued requests (a queued download
@@ -904,10 +905,10 @@ Each feature appends a short entry here: what it added, where it lives, anything
   keeps the canvas readable); `lib/loadImage.ts`, `services/tiles.ts` are new; no change to `types/trip.ts`.
 - **Tests**: Vitest for projection and `fitViewport` (padding, single point, max zoom, obstacles incl. lines between
   points and several obstacles), tile zoom and grids (wrapping, poles, the cap), label placement, text wrapping and
-  ellipsis, card content and layout, theme tokens, leg drawing plans, legend / label / attribution metrics, icon outlines,
+  ellipsis, card content and layout, theme tokens, leg drawing plans, legend / label / credit metrics, icon outlines,
   options, file names, the tile client (concurrency, de-duplication, cache, failures, abort). `e2e/export-image.spec.ts`
   (mocked tiles, with CORS): dialog open/close and focus, preview content, PNG size for every preset and 2×, pixel checks
-  of the downloaded file (tiles, route, card corner, attribution), every switch changes the preview, legend needs two
+  of the downloaded file (tiles, route, card corner, credit), every switch changes the preview, legend needs two
   modes, card style vs app theme, ≤ 300 tiles and ≤ 6 at a time for A4 at 2×, progress and disabled buttons, tile
   failures (warning, image still made), clipboard, empty and one-place trips, remembered options (and damaged ones),
   unrouted legs, no new tiles after closing, no undo step.
@@ -1008,6 +1009,55 @@ Each feature appends a short entry here: what it added, where it lives, anything
 - **Known gaps**: the other-tab check compares trips only when a `storage` event arrives (a tab that was asleep sees the toast on its next
   event, not before); two tabs editing the same trip alternately will keep asking each other; presentation mode refits the map when
   toggled, so a hand-made view is not kept; the README screenshots are static and will age with the UI.
+
+### F12 — the OpenStreetMap credit on exported images
+
+The user asked for no "OpenStreetMap contributors" on the exported PNG "if possible". It is possible only in one way: the OSMF
+[Attribution Guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines) (read in full when this was built) say
+"Attribution must be to 'OpenStreetMap'" and that "© OpenStreetMap" is an accepted form; it "must be legible and understandable" and
+"placed in the vicinity of the produced work". For static images: "the credit should typically appear in a corner of the map … Alternatively,
+the attribution may be placed adjacent to the map", and where hyperlinking is impossible (a PNG) the rule for books and printed maps
+applies: "the credit must appear beside the map … The URL to openstreetmap.org/copyright must be printed out." So the credit may leave
+the picture only if it goes **beside** it **with that URL**; it can never simply be dropped. Do not remove it without re-reading those
+rules (the tile usage policy requires visible attribution as well).
+
+- **Choice** (`ExportOptions.credit: 'beside' | 'image'`, default `'beside'`, remembered with the other export options and repaired by
+  `sanitizeOptions`, so a damaged value falls back to `'beside'`, never to "none"): `CreditMode` and every text live in
+  `attribution.ts` (`CREDIT_CAPTION` = "Map © OpenStreetMap — openstreetmap.org/copyright", `IMAGE_CREDIT_TEXT` = "© OpenStreetMap ·
+  openstreetmap.org/copyright"). `TripImageOptions.credit` is **required**, so a new caller of `renderTripImage` has to decide.
+- **Beside the image** (default): nothing is drawn. The dialog's "Map credit" control sits with the other options; under the preview
+  it shows "Caption to post with the image", the caption text (one click selects all) and a Copy button (hidden without
+  `navigator.clipboard.writeText`; it says "Copied" for two seconds, no toast), with the reason ("OpenStreetMap's licence asks for
+  this credit next to the image"). "Copy image" puts **the picture alone** on the clipboard (`deliver.copyPng`): a `text/plain` item
+  beside it makes text fields and many chat and markdown apps paste the caption instead of the picture, so the caption has its own
+  button. After a Download an info toast (12 s) reminds "Add the credit when you post the image: …" with a "Copy caption" action,
+  which does what the Copy button does (and the button then says "Copied").
+- **Small, in the image**: `paintCredit` draws the text in the corner `placeCredit` picks: 11 px × `u` Inter 500 in `#18212f` with a
+  3.5 px white halo (85 %), no plate (the tiles are always the light OSM style, so it is the same in both app themes), flush with
+  the bottom-right corner with 8 px side padding and a 22 px tall area. At 1× every preset has `u` ≥ 1.2, so the letters are ≥ 13 px
+  on the canvas (`MIN_CREDIT_PX` = 12 is the floor the unit test holds every preset to); A4 and 2× scale it up with the picture.
+  `placeCredit` tries bottom-right, top-right, bottom-left, top-left and takes the first that does not overlap the card or the legend
+  (with the usual layout it is always bottom-right); it is also an obstacle for the name labels and, with `creditClearSides`, for the
+  view fit (content that would run under it moves left / above it, like the card and legend; with the usual padding this does not
+  cost any zoom). The preview draws the same.
+- **PNG metadata**: `canvasToPng` writes a tEXt chunk `Copyright` = "Map © OpenStreetMap - openstreetmap.org/copyright" right after
+  the header chunk of every PNG, in both modes (`pngText.ts`: CRC-32, `textChunk`, `addPngText`; Latin-1 only, as tEXt is, so the
+  text has a hyphen where the caption has a dash). It travels with the file wherever it is posted; the visible credit is still what
+  the guidelines require.
+- **Live map**: unchanged (Leaflet's attribution control, "interactive map" rule).
+- **Ride video export (planned)**: follows the guidelines' video rule: the credit goes **on the video itself** (the map is the focus
+  and there is no place beside it), i.e. it will always use the in-image credit, not offer "beside". Reuse `paintCredit` / `placeCredit`.
+- **Shared-file edits**: `services/config.ts` loses `TILE_ATTRIBUTION_TEXT` (the exporter's plate text, now in `attribution.ts`);
+  README and Help text; `components/*` and `types/trip.ts` untouched.
+- **Tests**: Vitest: the texts (© OpenStreetMap and the URL in both), corner choice and collisions, the view fit keeping clear of the
+  credit (`attribution.test.ts`), legibility of every preset at 1×, options default / repair (`options.test.ts`), the clipboard item
+  holding the image only (`deliver.test.ts`), the chunk writer (CRC check value, chunk layout and CRC read back with Node's zlib, placement
+  after IHDR, refusal of non-Latin-1 text and of non-PNG bytes: `pngText.test.ts`). `e2e/export-image.spec.ts` (mocked tiles): default download has not one drawn pixel in the credit
+  corner and the caption is shown and copied; "Small, in the image" draws letters with a halo and no plate, also at 1080 × 1080 next
+  to the legend; the preview follows the choice; the download reminder and its Copy action; Copy image puts `image/png` alone on the
+  clipboard in both modes; the downloaded file has the tEXt chunk in both modes; the credit choice is in view in an 800 px tall
+  window; the choice persists across reload; a damaged stored value falls back to the caption.
+- **Known gaps**: the caption is not translated or customisable; the in-image credit is only ever in a corner.
 
 ### F15 — deployment to GitHub Pages
 

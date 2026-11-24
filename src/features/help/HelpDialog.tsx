@@ -34,7 +34,7 @@ const TOPICS: { id: string; title: string; items: string[] }[] = [
       'The card on the map shows the title, dates, distance, driving time and the countries you pass. Click the title to edit it.',
       'Ride plays the trip as a little campervan driving day by day; Space pauses it and the arrow keys jump between days.',
       'Presentation mode (P) hides the sidebar and every editing tool, which is what you want for showing a trip to others. Esc leaves it.',
-      'Export image (the picture button in the top bar) makes a PNG of the whole trip: pick a size (landscape, portrait, square or A4 print), choose what to show on it, check the preview, then download it or copy it. It works in presentation mode too.',
+      'Export image (the picture button in the top bar) makes a PNG of the whole trip: pick a size (landscape, portrait, square or A4 print), choose what to show on it, check the preview, then download it or copy it. The map’s OpenStreetMap credit is not drawn on the picture unless you choose “Small, in the image”: post the caption shown under the preview (it has its own Copy button) with the picture. It works in presentation mode too.',
     ],
   },
   {

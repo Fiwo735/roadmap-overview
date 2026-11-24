@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Copy, Download, ImageOff, TriangleAlert } from 'lucide-react'
+import { Check, Copy, Download, ImageOff, TriangleAlert } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { SegmentedControl } from '../../components/SegmentedControl'
 import { Spinner } from '../../components/Spinner'
 import { Switch } from '../../components/Switch'
+import { toast } from '../../components/toast'
 import { modesInUse } from '../../lib/legModes'
 import { isAbortError } from '../../lib/requestQueue'
 import { useTripStore } from '../../store/tripStore'
 import { useUiStore } from '../../store/uiStore'
 import { useLegRoutes } from '../routing/legRoutes'
 import { useTripStats } from '../stats/useTripStats'
-import { canCopyImage, copyPng, downloadBlob } from './deliver'
+import { CREDIT_CAPTION, type CreditMode } from './attribution'
+import { canCopyImage, canCopyText, copyPng, copyText, downloadBlob } from './deliver'
 import { useExportOptions } from './exportStore'
 import { exportFilename, isVeryLarge, LARGE_IMAGE_HINT, outputSize, presetOf, type CardStyle, type ExportOptions, type ExportScale } from './options'
 import { PresetPicker } from './PresetPicker'
@@ -47,6 +49,14 @@ function describeOutcome(action: Action, filename: string, result: TripImageResu
   return { kind: 'success', text }
 }
 
+/** After a download without the credit in it: remind the user that it goes beside the picture. */
+function remindOfCredit(copyCaption: () => void) {
+  toast.info(`Add the credit when you post the image: ${CREDIT_CAPTION}`, {
+    duration: 12_000,
+    action: canCopyText() ? { label: 'Copy caption', onClick: copyCaption } : undefined,
+  })
+}
+
 /** The dialog behind the top bar's image button: choose a size and what to show, check the preview, download or copy. */
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const options = useExportOptions((s) => s.options)
@@ -78,10 +88,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             labels: options.labels,
             days: options.days,
             legend: options.legend,
+            credit: options.credit,
             theme,
           }
         : null,
-    [hasPlaces, countriesStatus, trip, legs, stats, preset, options.card, options.labels, options.days, options.legend, theme],
+    [hasPlaces, countriesStatus, trip, legs, stats, preset, options.card, options.labels, options.days, options.legend, options.credit, theme],
   )
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -89,6 +100,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
   const [busy, setBusy] = useState<Busy | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  // The caption's Copy button says "Copied" for a moment.
+  const [captionCopied, setCaptionCopied] = useState(false)
+  const copiedTimer = useRef<number | undefined>(undefined)
   // What the last download said is about the options it was made with.
   const setOptions = (patch: Partial<ExportOptions>) => {
     setOutcome(null)
@@ -104,8 +118,21 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     return () => {
       mounted.current = false
       controller.abort()
+      window.clearTimeout(copiedTimer.current)
     }
   }, [])
+
+  // The caption's Copy button and the reminder after a download both come here; the button says "Copied".
+  async function copyCaption() {
+    if (!(await copyText(CREDIT_CAPTION))) {
+      toast.error('The caption could not be copied. Select it and copy it yourself.')
+      return
+    }
+    if (!mounted.current) return
+    setCaptionCopied(true)
+    window.clearTimeout(copiedTimer.current)
+    copiedTimer.current = window.setTimeout(() => setCaptionCopied(false), 2000)
+  }
 
   async function run(action: Action) {
     if (!params || busy) return
@@ -120,9 +147,14 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       return { result, blob: await canvasToPng(result.canvas) }
     })
     rendered.catch(() => undefined) // reported below; this keeps an early failure of the clipboard from leaving it unhandled
+    const { credit } = params
     try {
+      // The clipboard gets the picture alone (see `copyPng`); a download without the credit in it reminds of the caption.
       if (action === 'copy') await copyPng(rendered.then((r) => r.blob))
-      else downloadBlob((await rendered).blob, filename)
+      else {
+        downloadBlob((await rendered).blob, filename)
+        if (credit === 'beside') remindOfCredit(() => void copyCaption())
+      }
       const { result } = await rendered
       if (mounted.current) setOutcome(describeOutcome(action, filename, result))
     } catch (error) {
@@ -213,6 +245,26 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             {pixels.width} × {pixels.height} px
           </p>
 
+          {hasPlaces && options.credit === 'beside' ? (
+            <div className="export__caption" style={{ width: `min(100%, ${Math.max(frameWidth, 360)}px)` }} data-testid="export-caption">
+              <h3 className="export__label">Caption to post with the image</h3>
+              <div className="export__caption-row">
+                <p className="export__caption-text" data-testid="export-caption-text">
+                  {CREDIT_CAPTION}
+                </p>
+                {canCopyText() ? (
+                  <Button size="sm" icon={captionCopied ? <Check size={14} /> : <Copy size={14} />} onClick={copyCaption} data-testid="export-caption-copy">
+                    {captionCopied ? 'Copied' : 'Copy'}
+                  </Button>
+                ) : null}
+              </div>
+              <p className="export__hint">
+                OpenStreetMap’s licence asks for this credit next to the image.
+                {canCopyText() ? ' Copy it with the button and post it with the picture.' : ''}
+              </p>
+            </div>
+          ) : null}
+
           <div className="export__status">
             {busy ? (
               <div className="export__progress" data-testid="export-progress">
@@ -262,6 +314,22 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 { value: '2', label: '2× sharper' },
               ]}
             />
+          </div>
+
+          <div className="export__group">
+            <h3 className="export__label">Map credit</h3>
+            <SegmentedControl<CreditMode>
+              label="Map credit"
+              value={options.credit}
+              onChange={(credit) => setOptions({ credit })}
+              options={[
+                { value: 'beside', label: 'Beside the image' },
+                { value: 'image', label: 'Small, in the image' },
+              ]}
+            />
+            <p className="export__hint" data-testid="export-credit-hint">
+              {options.credit === 'beside' ? 'Nothing is drawn on the image: post the caption with it.' : 'Drawn small in the bottom-right corner of the image.'}
+            </p>
           </div>
 
           <div className="export__group">

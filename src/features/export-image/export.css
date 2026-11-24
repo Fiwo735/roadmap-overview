@@ -194,6 +194,36 @@
   font-size: var(--text-xs);
 }
 
+/* The credit to post beside the image: the text (one click selects it all) and its Copy button. */
+.export__caption {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.export__caption-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.export__caption-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.export__caption-row .btn {
+  flex: none;
+}
+
 .presets {
   display: grid;
   grid-template-columns: 1fr 1fr;

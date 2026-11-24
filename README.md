@@ -73,10 +73,19 @@ that opens a trip straight in this mode (see [Sharing](#sharing)).
 ### Image export
 
 The **Export image** button in the top bar (the picture icon) opens a dialog that renders the whole trip as a **PNG picture**: the map with
-the route, numbered stops, the title and statistics card and the legend, with the OpenStreetMap attribution. Choose a size (landscape
-1920 × 1080, portrait, square, or A4 print), a sharper 2× resolution, what to show (card, place names, day numbers, legend) and the card
-style (match the app, light or dark), check the live preview, then **Download PNG** or **Copy image**. Exporting never changes the trip, so it
-also works in presentation mode.
+the route, numbered stops, the title and statistics card and the legend. Choose a size (landscape
+1920 × 1080, portrait, square, or A4 print), a sharper 2× resolution, what to show (card, place names, day numbers, legend), the card
+style (match the app, light or dark) and where the **map credit** goes, check the live preview, then **Download PNG** or **Copy image**.
+Exporting never changes the trip, so it also works in presentation mode.
+
+**The OpenStreetMap credit.** The map data is © OpenStreetMap contributors and its licence asks for a credit wherever the map is shown.
+By default the picture stays clean and the credit goes **beside the image**: the dialog shows the caption *Map © OpenStreetMap —
+openstreetmap.org/copyright* with a Copy button, and after a download a note reminds you to add it where you post the image (**Copy image**
+copies the picture alone, so pasting it always gives the picture). Choose **Small, in the image** to have the
+credit drawn in a corner of the picture instead: small, discreet text with a soft halo, no box. Either way the PNG file itself carries
+"Copyright: Map © OpenStreetMap - openstreetmap.org/copyright" in its metadata. The credit cannot be switched off: the
+[OSMF attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines) allow it to leave the image only if it is
+printed beside it, with the address openstreetmap.org/copyright.
 
 ![An image exported from the sample trip: the map with the route, the stops and the title card](docs/screenshots/exported-image.jpg)
 
@@ -209,7 +218,7 @@ tile provider) by editing that file and rebuilding.
 
 | Service | Used for | Policy and what the app does |
 | --- | --- | --- |
-| **OpenStreetMap tiles**, `tile.openstreetmap.org` | The map (and the exported image) | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): visible attribution (always shown on the map and in exports), no bulk downloading (an image export fetches only the tiles of its own picture, at most 300 and six at a time, and keeps them in memory), and no heavy use: a busy site should use its own tile server or a commercial provider and change `TILE_URL`. |
+| **OpenStreetMap tiles**, `tile.openstreetmap.org` | The map (and the exported image) | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): visible attribution (always shown on the map; for an exported image either drawn in it or, by default, as a caption beside it that includes openstreetmap.org/copyright, as the [attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines) require), no bulk downloading (an image export fetches only the tiles of its own picture, at most 300 and six at a time, and keeps them in memory), and no heavy use: a busy site should use its own tile server or a commercial provider and change `TILE_URL`. |
 | **OSRM demo server**, `router.project-osrm.org` | Road routes between places | [Demo server policy](https://github.com/Project-OSRM/osrm-backend/wiki/Demo-server): light use only, no guarantees. The app sends at most one request at a time and one per second, never repeats a request (results are cached and saved with the trip) and does not retry in a loop: a failed leg shows a *Retry* button. For regular use run your own [OSRM](https://github.com/Project-OSRM/osrm-backend) (`OSRM_URL`, driving profile). |
 | **Nominatim**, `nominatim.openstreetmap.org` | Place search and naming dropped pins | [Usage policy](https://operations.osmfoundation.org/policies/nominatim/): at most one request per second, no search-as-you-type, cache results, identify the application. The app searches only on Enter or the search button, queues requests one per second, caches answers and sends the browser's own `Referer`. Self-host it or use a geocoding service with a compatible `/search` and `/reverse` API (`NOMINATIM_URL`) for more. |
 

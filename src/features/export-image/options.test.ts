@@ -42,14 +42,21 @@ describe('isVeryLarge', () => {
 
 describe('sanitizeOptions', () => {
   it('keeps valid options', () => {
-    const options = { preset: 'a4', scale: 2, card: false, labels: false, days: true, legend: false, cardStyle: 'dark' }
+    const options = { preset: 'a4', scale: 2, card: false, labels: false, days: true, legend: false, cardStyle: 'dark', credit: 'image' }
     expect(sanitizeOptions(options)).toEqual(options)
   })
 
   it('repairs anything else field by field', () => {
     expect(sanitizeOptions(null)).toEqual(DEFAULT_EXPORT_OPTIONS)
     expect(sanitizeOptions('x')).toEqual(DEFAULT_EXPORT_OPTIONS)
-    expect(sanitizeOptions({ preset: 'huge', scale: 3, card: 'yes', labels: false, cardStyle: 'pink' })).toEqual({ ...DEFAULT_EXPORT_OPTIONS, labels: false })
+    expect(sanitizeOptions({ preset: 'huge', scale: 3, card: 'yes', labels: false, cardStyle: 'pink', credit: 'none' })).toEqual({ ...DEFAULT_EXPORT_OPTIONS, labels: false })
+  })
+
+  it('puts the credit beside the image unless told otherwise, and never lets it be switched off', () => {
+    expect(DEFAULT_EXPORT_OPTIONS.credit).toBe('beside')
+    expect(sanitizeOptions({}).credit).toBe('beside')
+    expect(sanitizeOptions({ credit: 'image' }).credit).toBe('image')
+    for (const credit of [false, null, 'off', 'none', '', 0]) expect(sanitizeOptions({ credit }).credit).toBe('beside')
   })
 })
 

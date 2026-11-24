@@ -1,13 +1,12 @@
 import { modesInUse } from '../../lib/legModes'
 import { abortError } from '../../lib/requestQueue'
 import { effectiveDays } from '../../lib/trip'
-import { TILE_ATTRIBUTION_TEXT } from '../../services/config'
 import { tileClient, tileUrl, type TileClient } from '../../services/tiles'
 import type { LatLng, Trip } from '../../types/trip'
 import { displayName } from '../places/names'
 import type { LegRouteInfo } from '../routing/legRoutes'
 import type { TripStats } from '../stats/computeStats'
-import { layoutAttribution } from './attribution'
+import { creditClearSides, IMAGE_CREDIT_TEXT, layoutCredit, placeCredit, PNG_COPYRIGHT_KEYWORD, PNG_COPYRIGHT_TEXT, type CreditMode } from './attribution'
 import { buildCardContent, layoutCard, type CountriesStatus } from './card'
 import { CARD_THEMES, type CardThemeName } from './cardTheme'
 import { ensureFonts } from './fonts'
@@ -18,11 +17,12 @@ import { layoutLegend, LEGEND_FONT } from './legend'
 import { planLegs } from './legDrawing'
 import { layoutPill, MARKER_RADIUS } from './markers'
 import { LARGE_IMAGE_HINT, uiScaleFor } from './options'
+import { addPngText } from './pngText'
 import { unwrapTrip } from './unwrap'
 import {
   MAP_BACKGROUND,
-  paintAttribution,
   paintCard,
+  paintCredit,
   paintLabels,
   paintLegend,
   paintLegs,
@@ -59,7 +59,12 @@ export interface TripImageOptions {
   labels: boolean
   days: boolean
   legend: boolean
-  /** Colours of the card, legend and attribution. */
+  /**
+   * Where the OpenStreetMap credit goes. Required: a picture of OSM tiles needs one, either drawn in it ('image') or
+   * posted beside it ('beside'; the caller then owes the user that caption). See `attribution.ts`.
+   */
+  credit: CreditMode
+  /** Colours of the card and legend. */
   theme: CardThemeName
   maxTiles?: number
   /** Ask again for tiles that failed a moment ago (an explicit download), instead of leaving a gap at once. */
@@ -95,8 +100,8 @@ function labelOrder(count: number): number[] {
 
 /**
  * Draw the trip on a new canvas: OSM tiles fitted to the places and routes, the legs in their mode
- * styles, numbered markers with name labels, the title/statistics card, the legend and the
- * attribution. A tile that cannot be loaded leaves a gap (the result says how many); only an abort
+ * styles, numbered markers with name labels, the title/statistics card, the legend and, when asked
+ * for, the small OpenStreetMap credit. A tile that cannot be loaded leaves a gap (the result says how many); only an abort
  * or a browser that cannot make the canvas is an error.
  */
 export async function renderTripImage(options: TripImageOptions): Promise<TripImageResult> {
@@ -122,7 +127,7 @@ export async function renderTripImage(options: TripImageOptions): Promise<TripIm
   await ensureFonts([
     ...places.map((p) => displayName(p.name)),
     content ? [content.title, content.subtitle, content.dateRange, content.hint ?? '', ...content.tiles.flatMap((t) => [t.label, t.value])].join(' ') : '',
-    'Day 0123456789 km min — … ' + TILE_ATTRIBUTION_TEXT + ' Drive Ferry Train Flight',
+    'Day 0123456789 km min — … ' + (options.credit === 'image' ? IMAGE_CREDIT_TEXT : '') + ' Drive Ferry Train Flight',
   ])
   throwIfAborted(signal)
   const measure = (font: string, text: string) => {
@@ -139,13 +144,13 @@ export async function renderTripImage(options: TripImageOptions): Promise<TripIm
   const legendRect: Rect | null = legendLayout
     ? { x: margin, y: height - margin - legendLayout.height * u, width: legendLayout.width * u, height: legendLayout.height * u }
     : null
-  const plate = layoutAttribution(TILE_ATTRIBUTION_TEXT, measure)
-  const plateRect: Rect = { x: width - plate.width * u, y: height - plate.height * u, width: plate.width * u, height: plate.height * u }
+  const credit = options.credit === 'image' ? placeCredit(size, layoutCredit(measure), u, [cardRect, legendRect].filter((r): r is Rect => r !== null)) : null
 
-  // The view: everything visible, clear of the card and the legend.
+  // The view: everything visible, clear of the card, the legend and the credit.
   const obstacles: Obstacle[] = []
   if (cardRect) obstacles.push({ rect: cardRect, clear: ['right', 'below'] })
   if (legendRect) obstacles.push({ rect: legendRect, clear: ['right', 'above'] })
+  if (credit) obstacles.push({ rect: credit.rect, clear: creditClearSides(credit.corner) })
   const drawn = unwrapTrip(places, legs)
   const lines = [...drawn.places.map((p): LatLng[] => [p]), ...drawn.legs.map((l) => l.coords)]
   const view = fitViewport({ points: lines.flat(), lines, size, padding: 56 * u, obstacles, gap: 20 * u })
@@ -184,7 +189,7 @@ export async function renderTripImage(options: TripImageOptions): Promise<TripIm
   }
   const placed = placeLabels(requests, {
     bounds: { x: 8 * u, y: 8 * u, width: width - 16 * u, height: height - 16 * u },
-    obstacles: [cardRect, legendRect, plateRect].filter((r): r is Rect => r !== null),
+    obstacles: [cardRect, legendRect, credit?.rect ?? null].filter((r): r is Rect => r !== null),
     offset: 6 * u,
     gap: 3 * u,
   })
@@ -208,7 +213,7 @@ export async function renderTripImage(options: TripImageOptions): Promise<TripIm
   paintLabels(ctx, labelSpots, paint)
   if (cardLayout && cardRect) paintCard(ctx, cardLayout, cardRect, theme, flagImages, paint)
   if (legendLayout && legendRect) paintLegend(ctx, legendLayout, LEGEND_FONT, legendRect, theme, paint)
-  paintAttribution(ctx, plateRect, TILE_ATTRIBUTION_TEXT, theme, paint)
+  if (credit) paintCredit(ctx, credit.rect, credit.corner, paint)
   ctx.restore()
 
   return {
@@ -220,9 +225,10 @@ export async function renderTripImage(options: TripImageOptions): Promise<TripIm
   }
 }
 
-/** The canvas as a PNG file. */
-export function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error(LARGE_IMAGE_HINT))), 'image/png')
-  })
+/** The canvas as a PNG file, with the OpenStreetMap copyright in its metadata whichever way the visible credit goes. */
+export async function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+  if (!blob) throw new Error(LARGE_IMAGE_HINT)
+  const png = addPngText(new Uint8Array(await blob.arrayBuffer()), PNG_COPYRIGHT_KEYWORD, PNG_COPYRIGHT_TEXT)
+  return new Blob([png as Uint8Array<ArrayBuffer>], { type: 'image/png' })
 }

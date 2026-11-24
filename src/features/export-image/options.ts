@@ -1,3 +1,4 @@
+import type { CreditMode } from './attribution'
 import type { Size } from './geometry'
 
 // Framework-free: what the export dialog lets the user choose, and how that turns into pixels.
@@ -37,6 +38,11 @@ export interface ExportOptions {
   legend: boolean
   /** The card's colours: the app's current theme, or light/dark whatever the app shows. */
   cardStyle: CardStyle
+  /**
+   * Where the OpenStreetMap credit goes: 'beside' leaves it out of the picture and gives the user a caption to post
+   * with it, 'image' draws a small one in the corner. See `attribution.ts` for why one of the two is always needed.
+   */
+  credit: CreditMode
 }
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
@@ -47,6 +53,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   days: false,
   legend: true,
   cardStyle: 'auto',
+  credit: 'beside',
 }
 
 export const presetOf = (id: PresetId): SizePreset => SIZE_PRESETS.find((p) => p.id === id) ?? SIZE_PRESETS[0]
@@ -87,6 +94,7 @@ export function sanitizeOptions(raw: unknown): ExportOptions {
   if (r.scale === 1 || r.scale === 2) out.scale = r.scale
   for (const key of ['card', 'labels', 'days', 'legend'] as const) if (typeof r[key] === 'boolean') out[key] = r[key]
   if (r.cardStyle === 'auto' || r.cardStyle === 'light' || r.cardStyle === 'dark') out.cardStyle = r.cardStyle
+  if (r.credit === 'beside' || r.credit === 'image') out.credit = r.credit
   return out
 }
 

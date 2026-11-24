@@ -59,6 +59,8 @@ interface PngStats {
   at: number[][]
   /** Dark pixels (text) in the box asked for. */
   dark: number
+  /** Pixels in the box that are not the mock tile (its grey or its edge line): anything drawn there. */
+  drawn: number
 }
 
 /** Decode a PNG in the page and look at its pixels. */
@@ -85,16 +87,18 @@ async function analyse(page: Page, file: Buffer, points: [number, number][] = []
         return [data[i], data[i + 1], data[i + 2]]
       })
       let dark = 0
+      let drawn = 0
       if (darkBox) {
         const [x0, y0, x1, y1] = darkBox
         for (let y = y0; y < y1; y++) {
           for (let x = x0; x < x1; x++) {
             const i = (y * canvas.width + x) * 4
             if (data[i] + data[i + 1] + data[i + 2] < 300) dark++
+            if (!(data[i] === data[i + 1] && data[i] === data[i + 2] && data[i] >= 205 && data[i] <= 230)) drawn++ // the mock tile: grey 230, with a 210 edge line
           }
         }
       }
-      return { width: canvas.width, height: canvas.height, tileShare: tile / (data.length / 4), routeBlue: blue, at, dark }
+      return { width: canvas.width, height: canvas.height, tileShare: tile / (data.length / 4), routeBlue: blue, at, dark, drawn }
     },
     { base64: file.toString('base64'), points, darkBox },
   )
@@ -169,16 +173,134 @@ test.describe('export image', () => {
     })
   }
 
-  test('draws the card in the corner, the attribution in the other, and the route in between', async ({ page, app }) => {
+  // u = 1.2 at 1080 px tall (1× of every preset but A4): the card starts 24 px from the corner, the credit is flush with the bottom-right one.
+  const CREDIT_BOX: [number, number, number, number] = [1500, 1040, 1920, 1080]
+
+  test('draws the card in one corner and, by default, nothing in the opposite one: the credit goes beside the image', async ({ page, app }) => {
     await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
     await openDialog(page)
     const { file } = await downloadPng(page)
-    // u = 1.2 at 1920 × 1080: the card starts 24 px from the corner and the plate is flush with the bottom-right one.
-    const stats = await analyse(page, file, [[30, 30], [1915, 1075], [1000, 20]], [1620, 1056, 1920, 1080])
+    const stats = await analyse(page, file, [[30, 30], [1915, 1075], [1000, 20]], CREDIT_BOX)
     expect(luminance(stats.at[0])).toBeGreaterThan(250) // the card's white
-    expect(luminance(stats.at[1])).toBeGreaterThan(240) // the attribution plate
-    expect(stats.at[2]).toEqual([230, 230, 230]) // plain map elsewhere
-    expect(stats.dark).toBeGreaterThan(100) // the attribution text
+    expect(stats.at[1]).toEqual([230, 230, 230]) // plain map in the corner…
+    expect(stats.at[2]).toEqual([230, 230, 230]) // …and elsewhere
+    expect(stats.drawn).toBe(0) // not one pixel of credit
+    expect(stats.dark).toBe(0)
+  })
+
+  test('draws a small credit in the corner when asked to: text with a halo, no plate', async ({ page, app }) => {
+    await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
+    await openDialog(page)
+    await page.getByRole('radio', { name: 'Small, in the image' }).click()
+    await expectPreviewReady(page)
+    const { file } = await downloadPng(page)
+    const stats = await analyse(page, file, [[1919, 1079], [1915, 1060], [1500, 1075]], CREDIT_BOX)
+    expect(stats.dark).toBeGreaterThan(150) // the letters
+    expect(stats.drawn).toBeGreaterThan(stats.dark) // and their soft halo
+    // Where a plate would have been the map shows: only the letters and a thin halo are drawn.
+    expect(stats.at[0]).toEqual([230, 230, 230])
+    expect(stats.at[1]).toEqual([230, 230, 230])
+    expect(stats.at[2]).toEqual([230, 230, 230])
+    expect((await analyse(page, file, [], [1500, 1040, 1920, 1056])).drawn).toBe(0) // a plate would start at 1054
+  })
+
+  test('keeps the in-image credit legible at the smallest output size, clear of the legend', async ({ page, app }) => {
+    await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
+    await app.page.evaluate(() => {
+      const s = window.__ROADMAP__!.trip.getState()
+      s.updateLeg(s.trip.legs[1].id, { mode: 'ferry' })
+    })
+    await openDialog(page)
+    await page.getByTestId('export-preset-square').click()
+    await page.getByRole('radio', { name: 'Small, in the image' }).click()
+    await expectPreviewReady(page)
+    const { file } = await downloadPng(page)
+    expect(pngSize(file)).toEqual({ width: 1080, height: 1080 })
+    const credit = await analyse(page, file, [], [700, 1040, 1080, 1080])
+    expect(credit.dark).toBeGreaterThan(150) // 13 px letters at 1×: well drawn, not a smudge
+    // The legend sits in the opposite bottom corner and the credit never reaches it.
+    const legend = await analyse(page, file, [], [20, 940, 260, 1060])
+    expect(legend.dark).toBeGreaterThan(100)
+    const between = await analyse(page, file, [], [300, 1040, 700, 1080])
+    expect(between.drawn).toBe(0)
+  })
+
+  test('writes the copyright into every PNG it makes, whichever way the visible credit goes', async ({ page, app }) => {
+    await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
+    await openDialog(page)
+    const chunk = Buffer.from('tEXtCopyright\0Map \xa9 OpenStreetMap - openstreetmap.org/copyright', 'latin1')
+    for (const mode of ['Beside the image', 'Small, in the image']) {
+      await page.getByRole('radio', { name: mode }).click()
+      await expectPreviewReady(page)
+      const { file } = await downloadPng(page)
+      const at = file.indexOf(chunk)
+      expect(at, mode).toBe(8 + 4 + 4 + 13 + 4 + 4) // right after the header chunk
+      expect(file.readUInt32BE(at - 4)).toBe(chunk.length - 4) // its length field
+      expect(pngSize(file)).toEqual({ width: 1920, height: 1080 }) // and the picture still decodes
+      expect((await analyse(page, file)).tileShare).toBeGreaterThan(0.3)
+    }
+  })
+
+  test('shows the map credit choice without scrolling in a dialog of about 800 px', async ({ page, app }) => {
+    await page.setViewportSize({ width: 1440, height: 800 })
+    await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
+    await openDialog(page)
+    await expect(page.getByRole('radio', { name: 'Beside the image' })).toBeInViewport({ ratio: 1 })
+    await expect(page.getByRole('radio', { name: 'Small, in the image' })).toBeInViewport({ ratio: 1 })
+    await expect(page.getByTestId('export-credit-hint')).toBeInViewport({ ratio: 1 })
+  })
+
+  test('the preview shows what the picture will have: the credit appears only when it is chosen', async ({ page, app }) => {
+    await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
+    await openDialog(page)
+    const beside = await previewImage(page)
+    await page.getByRole('radio', { name: 'Small, in the image' }).click()
+    await expectPreviewReady(page)
+    await expect.poll(() => previewImage(page)).not.toBe(beside)
+    await page.getByRole('radio', { name: 'Beside the image' }).click()
+    await expectPreviewReady(page)
+    await expect.poll(() => previewImage(page)).toBe(beside)
+  })
+
+  test('puts the credit caption beside the preview, with a button that copies it', async ({ page, app, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
+    await openDialog(page)
+    await expect(page.getByRole('radio', { name: 'Beside the image' })).toBeChecked() // the default
+    const caption = page.getByTestId('export-caption')
+    await expect(caption).toBeVisible()
+    await expect(page.getByTestId('export-caption-text')).toHaveText('Map © OpenStreetMap — openstreetmap.org/copyright')
+    await expect(caption).toContainText('licence asks for this credit next to the image')
+
+    await page.getByTestId('export-caption-copy').click()
+    await expect(page.getByTestId('export-caption-copy')).toHaveText('Copied')
+    await expect(page.getByTestId('toast')).toHaveCount(0) // the button says it; nothing else pops up
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Map © OpenStreetMap — openstreetmap.org/copyright')
+
+    // With the credit in the image there is nothing to post beside it.
+    await page.getByRole('radio', { name: 'Small, in the image' }).click()
+    await expect(caption).toHaveCount(0)
+  })
+
+  test('reminds the user of the caption after a download, with a button that copies it', async ({ page, app, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
+    await openDialog(page)
+    await downloadPng(page)
+    const reminder = page.getByTestId('toast').filter({ hasText: 'Add the credit' })
+    await expect(reminder).toBeVisible()
+    await expect(reminder).toContainText('Map © OpenStreetMap — openstreetmap.org/copyright')
+    await reminder.getByRole('button', { name: 'Copy caption' }).click()
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Map © OpenStreetMap — openstreetmap.org/copyright')
+    await expect(page.getByTestId('export-caption-copy')).toHaveText('Copied') // the dialog's own button shows it, no second toast
+    await expect(page.getByTestId('toast').filter({ hasText: 'copied' })).toHaveCount(0)
+
+    // No reminder when the credit is in the picture.
+    await page.getByRole('radio', { name: 'Small, in the image' }).click()
+    await expect(page.getByTestId('toast').filter({ hasText: 'Add the credit' })).toHaveCount(0)
+    await downloadPng(page)
+    await expect(outcome(page)).toContainText('Saved')
+    await expect(page.getByTestId('toast').filter({ hasText: 'Add the credit' })).toHaveCount(0)
   })
 
   test('toggles show and hide the card, names, day numbers and legend', async ({ page, app }) => {
@@ -348,19 +470,27 @@ test.describe('export image', () => {
     await expect(page.getByTestId('export-notes')).toHaveCount(0)
   })
 
-  test('copies the image to the clipboard', async ({ page, app, context }) => {
+  /** What `navigator.clipboard` holds: the types and the picture's size. */
+  const readClipboard = (page: Page) =>
+    page.evaluate(async () => {
+      const [item] = await navigator.clipboard.read()
+      const bitmap = await createImageBitmap(await item.getType('image/png'))
+      return { types: [...item.types], width: bitmap.width, height: bitmap.height }
+    })
+
+  test('copies the image alone to the clipboard, whichever way the credit goes: text beside it would be pasted in its place', async ({ page, app, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await openTrip(page, app, 'Lyon', 'Annecy', 'Zurich')
     await openDialog(page)
     await page.getByTestId('export-copy').click()
     await expect(outcome(page)).toContainText('Image copied to the clipboard (1920 × 1080 px)')
-    const copied = await page.evaluate(async () => {
-      const [item] = await navigator.clipboard.read()
-      const blob = await item.getType('image/png')
-      const bitmap = await createImageBitmap(blob)
-      return { types: item.types, width: bitmap.width, height: bitmap.height }
-    })
-    expect(copied).toEqual({ types: ['image/png'], width: 1920, height: 1080 })
+    expect(await readClipboard(page)).toEqual({ types: ['image/png'], width: 1920, height: 1080 })
+
+    await page.getByRole('radio', { name: 'Small, in the image' }).click()
+    await expectPreviewReady(page)
+    await page.getByTestId('export-copy').click()
+    await expect(outcome(page)).toContainText('Image copied to the clipboard (1920 × 1080 px)')
+    expect(await readClipboard(page)).toEqual({ types: ['image/png'], width: 1920, height: 1080 })
   })
 
   test('has nothing to export for an empty trip', async ({ page, app }) => {
@@ -392,6 +522,7 @@ test.describe('export image', () => {
     await page.getByTestId('export-toggle-days').click()
     await page.getByTestId('export-toggle-labels').click()
     await page.getByRole('radio', { name: 'Dark', exact: true }).click()
+    await page.getByRole('radio', { name: 'Small, in the image' }).click()
     await expectPreviewReady(page)
     await page.keyboard.press('Escape')
 
@@ -400,23 +531,34 @@ test.describe('export image', () => {
     await expect(page.getByTestId('export-toggle-days')).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByTestId('export-toggle-labels')).toHaveAttribute('aria-checked', 'false')
     await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Small, in the image' })).toBeChecked()
 
     // And after a reload, from localStorage.
-    expect(JSON.parse((await page.evaluate((k) => localStorage.getItem(k), OPTIONS_KEY)) as string)).toMatchObject({ preset: 'square', days: true, labels: false, cardStyle: 'dark' })
+    expect(JSON.parse((await page.evaluate((k) => localStorage.getItem(k), OPTIONS_KEY)) as string)).toMatchObject({
+      preset: 'square',
+      days: true,
+      labels: false,
+      cardStyle: 'dark',
+      credit: 'image',
+    })
     await page.keyboard.press('Escape')
     await page.reload()
     await page.waitForFunction(() => window.__ROADMAP__?.getMap() != null)
     await button(page).click()
     await expect(page.getByTestId('export-preset-square').getByRole('radio')).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Small, in the image' })).toBeChecked()
   })
 
   test('ignores damaged saved choices', async ({ page, app }) => {
-    await app.seedRawStorage(OPTIONS_KEY, '{"preset":"huge","scale":7,"card":"yes","labels":false}')
+    await app.seedRawStorage(OPTIONS_KEY, '{"preset":"huge","scale":7,"card":"yes","labels":false,"credit":"none"}')
     await openTrip(page, app, 'Lyon', 'Annecy')
     await openDialog(page)
     await expect(page.getByTestId('export-preset-landscape').getByRole('radio')).toBeChecked()
     await expect(page.getByTestId('export-toggle-labels')).toHaveAttribute('aria-checked', 'false') // the valid part survives
     await expect(page.getByTestId('export-toggle-card')).toHaveAttribute('aria-checked', 'true')
+    // There is no way to have no credit: a value that is not one of the two falls back to the caption.
+    await expect(page.getByRole('radio', { name: 'Beside the image' })).toBeChecked()
+    await expect(page.getByTestId('export-caption')).toBeVisible()
   })
 
   test('warns about legs that could not be routed, and still exports', async ({ page, app, mocks }) => {

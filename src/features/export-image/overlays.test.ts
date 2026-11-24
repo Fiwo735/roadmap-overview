@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { layoutAttribution } from './attribution'
 import { iconPaths, svgToPaths, type IconId } from './icons'
 import { layoutLegend } from './legend'
 import { layoutPill, LABEL_HEIGHT, markerFontSize } from './markers'
@@ -43,12 +42,6 @@ describe('marker numbers', () => {
     expect(markerFontSize(1)).toBe(13)
     expect(markerFontSize(2)).toBe(13)
     expect(markerFontSize(3)).toBe(11)
-  })
-})
-
-describe('layoutAttribution', () => {
-  it('is as wide as its text plus padding', () => {
-    expect(layoutAttribution('© OpenStreetMap contributors', measure)).toEqual({ width: 28 * 7 + 16, height: 20 })
   })
 })
 

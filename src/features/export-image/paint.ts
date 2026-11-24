@@ -8,7 +8,7 @@ import { iconPaths, type IconId } from './icons'
 import type { LegsPlan, LineStyle } from './legDrawing'
 import { LEGEND_ICON_SIZE, LEGEND_SAMPLE, type LegendLayout } from './legend'
 import type { PlacedLabel } from './labelPlacement'
-import { ATTRIBUTION_FONT, ATTRIBUTION_PAD_X } from './attribution'
+import { creditBaseline, CREDIT_FONT, CREDIT_HALO_WIDTH, CREDIT_PAD_X, IMAGE_CREDIT_TEXT, type CreditCorner } from './attribution'
 import { MARKER_BORDER, MARKER_RADIUS, MODE_BADGE_ICON, MODE_BADGE_RADIUS, markerFont, markerFontSize, type PillLayout } from './markers'
 import { font } from './typography'
 
@@ -27,6 +27,7 @@ const MARKER_COLOR = MODES.drive.color
 const LABEL_BACKGROUND = 'rgba(255, 255, 255, 0.94)'
 const LABEL_TEXT = '#18212f'
 const LABEL_DAY_TEXT = '#5b6678'
+const CREDIT_HALO = 'rgba(255, 255, 255, 0.85)'
 const MAP_SHADOW = 'rgba(15, 23, 42, 0.45)'
 
 function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number | [number, number, number, number]): void {
@@ -358,22 +359,24 @@ export function paintLegend(ctx: CanvasRenderingContext2D, layout: LegendLayout,
   ctx.restore()
 }
 
-/** The attribution plate in the bottom-right corner of the image (`rect`, flush with the corner). */
-export function paintAttribution(ctx: CanvasRenderingContext2D, rect: Rect, text: string, theme: CardTheme, { u }: PaintScale): void {
+/**
+ * The OpenStreetMap credit, small in the corner `rect` is flush with: no plate, a soft light halo behind the
+ * letters so they read on any tiles (the tiles are always the light standard style, in either app theme).
+ */
+export function paintCredit(ctx: CanvasRenderingContext2D, rect: Rect, corner: CreditCorner, { u }: PaintScale): void {
+  const right = corner.endsWith('right')
   ctx.save()
   ctx.translate(rect.x, rect.y)
   ctx.scale(u, u)
-  const w = rect.width / u
-  const h = rect.height / u
-  ctx.fillStyle = theme.surface
-  ctx.globalAlpha = 0.88
-  roundedRect(ctx, 0, 0, w, h, [6, 0, 0, 0])
-  ctx.fill()
-  ctx.globalAlpha = 1
-  ctx.font = ATTRIBUTION_FONT
-  ctx.fillStyle = theme.text
-  ctx.textAlign = 'left'
+  ctx.font = CREDIT_FONT
+  ctx.textAlign = right ? 'right' : 'left'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillText(text, ATTRIBUTION_PAD_X, h / 2 + 11 * 0.36)
+  const x = right ? rect.width / u - CREDIT_PAD_X : CREDIT_PAD_X
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = CREDIT_HALO_WIDTH
+  ctx.strokeStyle = CREDIT_HALO
+  ctx.strokeText(IMAGE_CREDIT_TEXT, x, creditBaseline)
+  ctx.fillStyle = LABEL_TEXT
+  ctx.fillText(IMAGE_CREDIT_TEXT, x, creditBaseline)
   ctx.restore()
 }
