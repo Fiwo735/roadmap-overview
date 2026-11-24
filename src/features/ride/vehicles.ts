@@ -1,82 +1,483 @@
-import type { LegMode } from '../../types/trip'
+import type { LegMode, TripVehicle, VehicleKind } from '../../types/trip'
+import { createLru } from '../../lib/lru'
+import { lighten, luminance, mixColors, parseColor, resolveVehicle } from '../../lib/vehicles'
+import type { Facing } from './camera'
 
 /**
- * The little vehicles of the ride, as SVG strings for a Leaflet divIcon. All are side views facing
- * east (the layer mirrors them to face west, so they are never upside-down) in a 64 × 40 box, with a
- * dark outline and light bodies so they read on any tile; colours are the mode colours of `MODES`
- * (the tiles are never themed, so neither are these). Wheels carry `class="ride-wheel"` so the CSS
- * can spin them while the vehicle moves.
+ * The little vehicles of the ride, drawn by hand as shapes in a 64 × 40 box: side views facing east, with a
+ * dark outline and light or saturated bodies so they read on any tile. One description serves both the page
+ * (`vehicleSvg`: an SVG string for the ride's Leaflet icon and the picker) and a canvas (`drawVehicle`: the
+ * same shapes painted with `Path2D`, for the picture and video export), so the two cannot drift apart. This
+ * file knows nothing of React or Leaflet.
+ *
+ * Road stretches show the trip's own vehicle (`TripVehicle`: a kind and a body colour); ferries, trains
+ * and flights keep theirs (`transportSvg` / `drawTransport` choose by the stretch's mode). Facing west
+ * mirrors the picture, so a vehicle is never upside-down. Wheels carry `class="ride-wheel"` so CSS can spin
+ * them while the vehicle moves; on a canvas `wheelAngle` turns them.
  */
-const INK = '#1f2937'
-const GLASS = '#bae6fd'
-const STROKE = `stroke="${INK}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"`
 
-function wheel(cx: number, cy: number, r: number): string {
-  return `<g class="ride-wheel" style="transform-origin:${cx}px ${cy}px"><circle cx="${cx}" cy="${cy}" r="${r}" fill="${INK}"/><circle cx="${cx}" cy="${cy}" r="${r * 0.45}" fill="#e2e8f0"/><path d="M${cx} ${cy - r * 0.8}V${cy + r * 0.8}" stroke="${INK}" stroke-width="1.2"/></g>`
+export type { Facing }
+
+/** The box every vehicle is drawn in (SVG user units). */
+export const VEHICLE_BOX = { width: 64, height: 40 } as const
+/** Where the vehicle touches its line (box units): the middle of the wheels, a little below the middle of the box. */
+export const VEHICLE_ANCHOR = { x: 32, y: 30.8 } as const
+/** The width the ride draws a vehicle at (px). */
+export const VEHICLE_DRAW_WIDTH = 56
+
+// ---- The shape model ----------------------------------------------------------------------------
+
+interface Paint {
+  fill?: string
+  stroke?: string
+  /** Stroke width; 2 by default. */
+  sw?: number
+  /** Opacity of the whole shape. */
+  op?: number
 }
 
-const VAN = `
-  <path d="M5 30V14.5Q5 10 9.5 10H37.5L51 20.5Q59 21.5 60.5 26V30Z" fill="#ffffff" ${STROKE}/>
-  <path d="M14 10V7.2Q14 5 16.2 5H31.8Q34 5 34 7.2V10" fill="#f1f5f9" ${STROKE}/>
-  <path d="M5.5 21H55Q59 21.5 60.5 25.5V28H5.5Z" fill="#ef6c3a" stroke="none"/>
-  <path d="M5 30V14.5Q5 10 9.5 10H37.5L51 20.5Q59 21.5 60.5 26V30Z" fill="none" ${STROKE}/>
-  <path d="M9.5 12.5H31V19H9.5Z" fill="${GLASS}" ${STROKE} stroke-width="1.6"/>
-  <path d="M36 12.5H37.5L47 19H36Z" fill="${GLASS}" ${STROKE} stroke-width="1.6"/>
-  <path d="M33.5 12v17" stroke="${INK}" stroke-width="1.4" fill="none"/>
-  <rect x="58" y="22.5" width="3" height="3.2" rx="1.2" fill="#fde047" stroke="${INK}" stroke-width="1.2"/>
-  <rect x="3.4" y="22.5" width="2.6" height="3.4" rx="1" fill="#dc2626" stroke="${INK}" stroke-width="1.2"/>
-  <path d="M57 30h5v2.2h-5Z" fill="${INK}" stroke="none"/>
-  ${wheel(17.5, 30.5, 6.2)}
-  ${wheel(47.5, 30.5, 6.2)}
-`
+interface PathShape extends Paint {
+  d: string
+  /** Part of the vehicle's outline: the canvas halo is drawn behind these. */
+  hull?: boolean
+}
 
-const FERRY = `
-  <path d="M4 25H60L53.5 34.5H11Z" fill="#0e7490" ${STROKE}/>
-  <path d="M7.5 29.5H57" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none"/>
-  <path d="M15 25V17.5H45V25" fill="#ffffff" ${STROKE}/>
-  <path d="M21 17.5V11H39V17.5" fill="#f1f5f9" ${STROKE}/>
-  <path d="M29 11V5H36V11" fill="#ef6c3a" ${STROKE}/>
-  <path d="M29 7.5H36" stroke="${INK}" stroke-width="1.6" fill="none"/>
-  <g fill="${GLASS}" stroke="${INK}" stroke-width="1.2">
-    <rect x="19" y="19.6" width="4.4" height="3.2" rx="0.8"/><rect x="26" y="19.6" width="4.4" height="3.2" rx="0.8"/>
-    <rect x="33" y="19.6" width="4.4" height="3.2" rx="0.8"/><rect x="40" y="19.6" width="2.6" height="3.2" rx="0.8"/>
-    <rect x="24.5" y="13.2" width="4.4" height="2.8" rx="0.8"/><rect x="31.5" y="13.2" width="4.4" height="2.8" rx="0.8"/>
-  </g>
-  <path d="M2 37.6q4-3 8 0t8 0t8 0t8 0t8 0t8 0t8 0t6 0" stroke="#0891b2" stroke-width="2.4" stroke-linecap="round" fill="none"/>
-`
+/** A wheel: its parts turn together about `spin` (its centre). */
+interface WheelShape {
+  spin: readonly [number, number]
+  parts: readonly PathShape[]
+}
 
-const TRAIN = `
-  <path d="M4 12.5H47Q59.5 12.5 61 25V31H4Z" fill="#7c3aed" ${STROKE}/>
-  <path d="M4 25.5H61" stroke="#ffffff" stroke-width="2.4" fill="none"/>
-  <g fill="${GLASS}" stroke="${INK}" stroke-width="1.4">
-    <rect x="8" y="16" width="7" height="6" rx="1.2"/><rect x="18" y="16" width="7" height="6" rx="1.2"/>
-    <rect x="28" y="16" width="7" height="6" rx="1.2"/><path d="M38.5 16H46Q52 16 55.5 22H38.5Z"/>
-  </g>
-  <path d="M24 12.5 28 6.8H38L42 12.5M28 6.8H38" fill="none" ${STROKE} stroke-width="1.6"/>
-  <rect x="57.2" y="26.4" width="2.4" height="2.4" rx="0.8" fill="#fde047"/>
-  <path d="M0 38H64" stroke="${INK}" stroke-width="1.6" fill="none"/>
-  ${wheel(14, 33.6, 3.8)}
-  ${wheel(25, 33.6, 3.8)}
-  ${wheel(44, 33.6, 3.8)}
-  ${wheel(55, 33.6, 3.8)}
-`
+type Shape = PathShape | WheelShape
 
-const FLIGHT = `
-  <path d="M6 20.5 3.5 8.5H10.5L18.5 18.5Z" fill="#db2777" ${STROKE}/>
-  <path d="M6.5 22Q6.5 17.2 15 17H49Q60.5 17 62.5 21.8Q60.5 26.6 49 26.6H15Q6.5 26.6 6.5 22Z" fill="#ffffff" ${STROKE}/>
-  <path d="M27.5 24 21 35.5H29.5L42 24Z" fill="#db2777" ${STROKE}/>
-  <path d="M26 20.5 20 9.5H27.5L38 19.5Z" fill="#f472b6" ${STROKE}/>
-  <g fill="${GLASS}" stroke="${INK}" stroke-width="1.2">
-    <rect x="14" y="19.4" width="3.6" height="3" rx="1"/><rect x="20" y="19.4" width="3.6" height="3" rx="1"/>
-    <rect x="30" y="19.4" width="3.6" height="3" rx="1"/><rect x="36" y="19.4" width="3.6" height="3" rx="1"/>
-    <path d="M51 19.2Q57.5 19.2 59.2 21.8H51Z"/>
-  </g>
-  <rect x="32" y="26" width="9" height="3.4" rx="1.7" fill="#e2e8f0" stroke="${INK}" stroke-width="1.4"/>
-`
+const INK = '#1f2937'
+const GLASS = '#bae6fd'
+const OUTLINE = { stroke: INK, sw: 2 } as const
 
-const ART: Record<LegMode, string> = { drive: VAN, ferry: FERRY, train: TRAIN, flight: FLIGHT }
+/** Short numbers in path data. */
+const n = (v: number): number => Math.round(v * 100) / 100
 
-/** The vehicle that carries the traveller on a stretch of this mode (`drive` is the campervan), facing east. */
-export function vehicleSvg(mode: LegMode): string {
-  return `<svg class="ride-art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="56" height="35" aria-hidden="true">${ART[mode]}</svg>`
+const path = (d: string, paint: Paint = {}, hull = false): PathShape => (hull ? { d, ...paint, hull } : { d, ...paint })
+
+function rect(x: number, y: number, w: number, h: number, r: number, paint: Paint = {}): PathShape {
+  const k = Math.min(r, w / 2, h / 2)
+  const d = k
+    ? `M${n(x + k)} ${n(y)}h${n(w - 2 * k)}a${n(k)} ${n(k)} 0 0 1 ${n(k)} ${n(k)}v${n(h - 2 * k)}a${n(k)} ${n(k)} 0 0 1 ${n(-k)} ${n(k)}h${n(-(w - 2 * k))}a${n(k)} ${n(k)} 0 0 1 ${n(-k)} ${n(-k)}v${n(-(h - 2 * k))}a${n(k)} ${n(k)} 0 0 1 ${n(k)} ${n(-k)}z`
+    : `M${n(x)} ${n(y)}h${n(w)}v${n(h)}h${n(-w)}z`
+  return path(d, paint)
+}
+
+const circle = (cx: number, cy: number, r: number, paint: Paint = {}): PathShape =>
+  path(`M${n(cx - r)} ${n(cy)}a${n(r)} ${n(r)} 0 1 0 ${n(2 * r)} 0a${n(r)} ${n(r)} 0 1 0 ${n(-2 * r)} 0z`, paint)
+
+/** A line (or several) drawn with the vehicle's outline pen. */
+const line = (d: string, stroke: string, sw: number, op?: number): PathShape => path(d, op === undefined ? { stroke, sw } : { stroke, sw, op })
+
+interface WheelStyle {
+  tyre?: string
+  rim?: string
+  /** The hub and the spokes. */
+  spoke?: string
+  /** Lines through the hub: 1 is a bar, 3 a six-spoke rim. */
+  spokes?: number
+}
+
+function wheel(cx: number, cy: number, r: number, { tyre = INK, rim = '#e2e8f0', spoke = INK, spokes = 1 }: WheelStyle = {}): WheelShape {
+  const reach = spokes > 1 ? 0.46 : 0.8
+  let bars = ''
+  for (let i = 0; i < spokes; i++) {
+    const a = (i * Math.PI) / spokes
+    const [dx, dy] = [Math.sin(a) * r * reach, -Math.cos(a) * r * reach]
+    bars += `M${n(cx - dx)} ${n(cy - dy)}L${n(cx + dx)} ${n(cy + dy)}`
+  }
+  const parts = [circle(cx, cy, r, { fill: tyre }), circle(cx, cy, r * 0.45 + (spokes > 1 ? 0.1 * r : 0), { fill: rim }), line(bars, spoke, spokes > 1 ? 1 : 1.2)]
+  if (spokes > 1) parts.push(circle(cx, cy, r * 0.13, { fill: spoke }))
+  return { spin: [cx, cy], parts }
+}
+
+/** `preferred`, unless the body is about that colour (a blue stripe on a blue car), then white or ink. */
+function accentFor(body: string, preferred: string): string {
+  const [a, b] = [parseColor(body), parseColor(preferred)]
+  if (!a || !b) return preferred
+  const distance = Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b)
+  if (distance > 90) return preferred
+  return luminance(body) > 0.5 ? INK : '#ffffff'
+}
+
+/** A body colour's lighter or darker tone for roofs and panels: darker for light colours, lighter for dark ones. */
+const toneOf = (color: string): string => (luminance(color) > 0.8 ? mixColors(color, '#94a3b8', 0.12) : lighten(color, 0.16))
+
+// ---- Road vehicles -------------------------------------------------------------------------------
+
+/** The original campervan: a white high-top with a coloured stripe. */
+function campervan(color: string): Shape[] {
+  const body = 'M5 30V14.5Q5 10 9.5 10H37.5L51 20.5Q59 21.5 60.5 26V30Z'
+  return [
+    path(body, { fill: color, ...OUTLINE }, true),
+    path('M14 10V7.2Q14 5 16.2 5H31.8Q34 5 34 7.2V10', { fill: toneOf(color), ...OUTLINE }),
+    path('M5.5 21H55Q59 21.5 60.5 25.5V28H5.5Z', { fill: accentFor(color, '#ef6c3a') }),
+    path(body, OUTLINE),
+    path('M9.5 12.5H31V19H9.5Z', { fill: GLASS, stroke: INK, sw: 1.6 }),
+    path('M36 12.5H37.5L47 19H36Z', { fill: GLASS, stroke: INK, sw: 1.6 }),
+    line('M33.5 12v17', INK, 1.4),
+    rect(58, 22.5, 3, 3.2, 1.2, { fill: '#fde047', stroke: INK, sw: 1.2 }),
+    rect(3.4, 22.5, 2.6, 3.4, 1, { fill: '#dc2626', stroke: INK, sw: 1.2 }),
+    path('M57 30h5v2.2h-5Z', { fill: INK }),
+    wheel(17.5, 30.5, 6.2),
+    wheel(47.5, 30.5, 6.2),
+  ]
+}
+
+/**
+ * A long-wheelbase, high-roof panel van in black: the short steep bonnet and big upright windscreen, the
+ * sliding side door, dark tinted glass and grey wheels. The body is near black, so its shape is carried by
+ * a pale roof edge, door lines, a crease and the wheel arches; no badges.
+ */
+function ivecoDaily(color: string): Shape[] {
+  const edge = '#05070a'
+  const trim = '#39414d'
+  const body = 'M3 31V12Q3 8 7 8H44.6Q46.6 8 47.7 9.8L53.2 21Q54 22.6 55.7 23.1L59.6 24.3Q61.7 24.9 61.7 27V31Z'
+  const arch = (cx: number) => path(`M${n(cx - 8.2)} 31.2V30.5A8.2 8.2 0 0 1 ${n(cx + 8.2)} 30.5V31.2Z`, { fill: edge })
+  const archRim = (cx: number) => line(`M${n(cx - 8.2)} 30.5A8.2 8.2 0 0 1 ${n(cx + 8.2)} 30.5`, '#6b7686', 0.9, 0.85)
+  return [
+    path(body, { fill: color, stroke: edge, sw: 2 }, true),
+    // The lighter plastic skirt along the bottom and the pale edge of the roof.
+    path('M3.6 28.4H61.1V30.8H3.6Z', { fill: '#262b33' }),
+    line('M6.6 9.5H44.4Q46 9.5 47 10.8', '#ffffff', 1, 0.42),
+    line('M4.2 21.4H53.4', '#ffffff', 0.8, 0.16),
+    // Cab: dark tinted glass, its glint, the door's rear edge. The windscreen is the slanted front edge.
+    path('M38.9 11.4H46.7Q47.2 11.4 47.5 11.9L51.7 20.6H38.9Z', { fill: '#1b2638', stroke: edge, sw: 1 }),
+    path('M41 11.8H43.9L40.6 20.2H38.9V19.6Z', { fill: '#ffffff', op: 0.17 }),
+    // The sliding door, whose front edge is the cab door's rear edge.
+    path('M25.4 29.4V12.4Q25.4 10.9 26.9 10.9H38.2V29.4', { stroke: '#5b6573', sw: 0.8, op: 0.9 }),
+    rect(34, 19.6, 2.8, 1.2, 0.6, { fill: '#8b95a3' }),
+    // The big mirror at the A-pillar.
+    path('M52.9 15.4H55.4Q56.4 15.4 56.4 16.4V19.5Q56.4 20.5 55.4 20.5H53.5Z', { fill: '#0d0f13', stroke: '#6b7686', sw: 0.8 }),
+    // Lamps and bumpers.
+    rect(58.8, 25.4, 3.3, 2.4, 1, { fill: '#f3f4f6', stroke: edge, sw: 1 }),
+    rect(55.2, 29, 7.5, 2.8, 1.2, { fill: trim, stroke: edge, sw: 1 }),
+    rect(3.1, 12.4, 2.1, 8.4, 0.9, { fill: '#dc2626', stroke: edge, sw: 0.8 }),
+    rect(1.6, 29, 6, 2.8, 1.2, { fill: trim, stroke: edge, sw: 1 }),
+    arch(14.2),
+    archRim(14.2),
+    arch(50.2),
+    archRim(50.2),
+    wheel(14.2, 30.5, 6.3, { tyre: '#0b0d10', rim: '#aab2be', spoke: '#5b6573', spokes: 3 }),
+    wheel(50.2, 30.5, 6.3, { tyre: '#0b0d10', rim: '#aab2be', spoke: '#5b6573', spokes: 3 }),
+  ]
+}
+
+/** A split-screen style camper bus: rounded, two-tone, a row of windows, round headlamp, chrome bumpers. */
+function retroBus(color: string): Shape[] {
+  const cream = '#f6efdc'
+  const chrome = '#e5e7eb'
+  const body = 'M4.5 31V15Q4.5 8.5 11 8H47Q52.5 8 54.4 12.5L58.6 22.5Q60.3 26 60.3 29V31Z'
+  return [
+    path(body, { fill: cream, ...OUTLINE }, true),
+    path('M4.5 31V22H54.6L59.4 24.6Q60.3 26.5 60.3 29V31Z', { fill: color }),
+    path(body, OUTLINE),
+    line('M4.8 22H58.8', accentFor(color, '#ffffff'), 1.2, 0.9),
+    path('M7.5 11.6H17V19H7.5Z', { fill: GLASS, stroke: INK, sw: 1.5 }),
+    path('M19.5 11.6H29.5V19H19.5Z', { fill: GLASS, stroke: INK, sw: 1.5 }),
+    path('M32 11.6H38V19H32Z', { fill: GLASS, stroke: INK, sw: 1.5 }),
+    path('M40.5 11.6H47.2Q48.7 11.6 49.4 13L52.4 19H40.5Z', { fill: GLASS, stroke: INK, sw: 1.5 }),
+    line('M39 10V30', INK, 1.4),
+    circle(59.4, 22.6, 2, { fill: '#fde68a', stroke: INK, sw: 1.2 }),
+    rect(2.5, 24, 2.4, 3.2, 1, { fill: '#dc2626', stroke: INK, sw: 1.2 }),
+    rect(57.2, 29.4, 5.4, 2, 0.9, { fill: chrome, stroke: INK, sw: 1.2 }),
+    rect(1.8, 29.4, 5.4, 2, 0.9, { fill: chrome, stroke: INK, sw: 1.2 }),
+    path('M9.6 31.2V30.4A6.8 6.8 0 0 1 23.2 30.4V31.2Z', { fill: INK }),
+    path('M40.4 31.2V30.4A6.8 6.8 0 0 1 54 30.4V31.2Z', { fill: INK }),
+    wheel(16.4, 30.9, 5.8, { rim: chrome }),
+    wheel(47.2, 30.9, 5.8, { rim: chrome }),
+  ]
+}
+
+/** A coachbuilt motorhome: the box body and the over-cab "Luton" bed above a lower cab. */
+function motorhome(color: string): Shape[] {
+  const body = 'M3 31V10.8Q3 7.8 6 7.8H55.6Q59.6 7.8 59.6 11.6V17.6H56.2Q55.6 17.6 55.9 18.2L58.4 24.3L61 25.2Q62.1 25.6 62.1 27V31Z'
+  return [
+    path(body, { fill: color, ...OUTLINE }, true),
+    path('M20 7.8V6.4Q20 5.5 21 5.5H28Q29 5.5 29 6.4V7.8', { fill: toneOf(color), ...OUTLINE }),
+    path('M3.5 22.8H43.8L41.2 26.6H3.5Z', { fill: accentFor(color, '#1e5fd0') }),
+    path(body, OUTLINE),
+    rect(11.5, 11.6, 15.5, 7.4, 1.6, { fill: GLASS, stroke: INK, sw: 1.6 }),
+    path('M33 10.8H41.6V29.4H33Z', { fill: toneOf(color), stroke: INK, sw: 1.4 }),
+    rect(35.2, 13.2, 4.2, 5.4, 1, { fill: GLASS, stroke: INK, sw: 1.2 }),
+    path('M45.6 18.9H55.1L57.2 23.8H45.6Z', { fill: GLASS, stroke: INK, sw: 1.6 }),
+    line('M44.8 18.4V29.6', INK, 1.4),
+    rect(60.2, 25.6, 2.6, 2.8, 1, { fill: '#fde047', stroke: INK, sw: 1.2 }),
+    rect(3.2, 12.2, 2.2, 4.6, 0.9, { fill: '#dc2626', stroke: INK, sw: 1.1 }),
+    path('M57.5 29.4h5.5v2.4h-5.5Z', { fill: INK }),
+    wheel(15.4, 30.5, 6.2),
+    wheel(51.2, 30.5, 6.2),
+  ]
+}
+
+/** A car towing a single-axle caravan: the car carries the chosen colour, the caravan its stripe. */
+function carWithCaravan(color: string): Shape[] {
+  const van = 'M2 30V15.2Q2 10.6 6.6 10.6H28.6Q32.4 10.6 34.4 13.8L36.6 18.2V30Z'
+  const car = 'M39.4 32.2V25.4Q39.4 23.4 41.4 23L45 22.4L47 18.6Q48 15 51 15H54.6Q56.4 15 57.6 16.6L60.2 21.8L61.6 22.6Q62.8 23.2 62.8 25.4V32.2Z'
+  return [
+    path(van, { fill: '#ffffff', ...OUTLINE }, true),
+    path('M14.5 10.6V9.2Q14.5 8.4 15.3 8.4H22.5Q23.3 8.4 23.3 9.2V10.6', { fill: '#f1f5f9', ...OUTLINE }),
+    path('M2.5 23.6H36.2V27H2.5Z', { fill: accentFor('#ffffff', color) }),
+    path(van, OUTLINE),
+    rect(8, 14.4, 15, 6.4, 1.4, { fill: GLASS, stroke: INK, sw: 1.5 }),
+    path('M26.6 14.6H31.2L33.6 18.4H26.6Z', { fill: GLASS, stroke: INK, sw: 1.4 }),
+    rect(1.4, 20.6, 2.2, 3.2, 0.9, { fill: '#dc2626', stroke: INK, sw: 1.1 }),
+    line('M36.6 29.6H41', INK, 2.4),
+    path(car, { fill: color, ...OUTLINE }, true),
+    path('M47.2 22L48.8 18.2Q49.4 16.8 50.8 16.8H54.2Q55.2 16.8 55.8 17.8L58.2 22Z', { fill: GLASS, stroke: INK, sw: 1.3 }),
+    line('M52.6 16.9V21.8', INK, 1.1),
+    rect(60.6, 23.6, 2.4, 2.2, 0.9, { fill: '#fde047', stroke: INK, sw: 1.1 }),
+    rect(39, 24, 1.8, 2.4, 0.7, { fill: '#dc2626', stroke: INK, sw: 1 }),
+    wheel(17.6, 31.6, 5.1),
+    wheel(45.4, 31.6, 5.1),
+    wheel(57, 31.6, 5.1),
+  ]
+}
+
+/** A tall, boxy 4×4 on big tyres with a folded roof tent on a roof rack and a spare wheel on the back. */
+function offroad(color: string): Shape[] {
+  const body = 'M8.6 28.4V17.4Q8.6 15 11 15H38.6Q40.4 15 41.4 16.2L46.2 21.8Q46.9 22.5 48 22.5H58.4Q60.8 22.5 60.8 25V28.4Z'
+  const arch = (cx: number) => path(`M${n(cx - 8.6)} 29.8V29.7A8.6 8.6 0 0 1 ${n(cx + 8.6)} 29.7V29.8Z`, { fill: INK })
+  return [
+    // Roof rack, then the folded tent with its straps; the snorkel up the windscreen pillar.
+    line('M14 13.2V15M26.5 13.2V15M37 13.2V15', INK, 1.6),
+    rect(10.6, 6.6, 31.2, 7, 2.6, { fill: '#6f6a5c', ...OUTLINE }),
+    line('M13.4 9.6H38.8', '#d9cfae', 1.1, 0.85),
+    line('M19.6 7.4V13M32 7.4V13', INK, 1, 0.7),
+    line('M44.2 18.6V11.8', INK, 1.5),
+    path(body, { fill: color, ...OUTLINE }, true),
+    path('M12.2 17.6H22.4V22H12.2Z', { fill: GLASS, stroke: INK, sw: 1.5 }),
+    path('M25.2 17.6H37.8Q38.8 17.6 39.4 18.4L41.4 22H25.2Z', { fill: GLASS, stroke: INK, sw: 1.5 }),
+    line('M23.8 16.4V27.6', INK, 1.4),
+    rect(58.6 - 0.2, 24, 2.6, 2.2, 0.9, { fill: '#fde047', stroke: INK, sw: 1.1 }),
+    path('M57.4 27.4h4.6v2.2h-4.6Z', { fill: INK }),
+    circle(5.2, 21.6, 4.2, { fill: INK }),
+    circle(5.2, 21.6, 1.7, { fill: '#cbd5e1' }),
+    arch(20),
+    arch(50.2),
+    wheel(20, 29.9, 6.8, { rim: '#cbd5e1', spokes: 3 }),
+    wheel(50.2, 29.9, 6.8, { rim: '#cbd5e1', spokes: 3 }),
+  ]
+}
+
+// ---- Ferry, train and plane ----------------------------------------------------------------------
+
+const FERRY: Shape[] = [
+  path('M4 25H60L53.5 34.5H11Z', { fill: '#0e7490', ...OUTLINE }, true),
+  line('M7.5 29.5H57', '#ffffff', 2),
+  path('M15 25V17.5H45V25', { fill: '#ffffff', ...OUTLINE }),
+  path('M21 17.5V11H39V17.5', { fill: '#f1f5f9', ...OUTLINE }),
+  path('M29 11V5H36V11', { fill: '#ef6c3a', ...OUTLINE }),
+  line('M29 7.5H36', INK, 1.6),
+  ...[
+    [19, 19.6, 4.4, 3.2],
+    [26, 19.6, 4.4, 3.2],
+    [33, 19.6, 4.4, 3.2],
+    [40, 19.6, 2.6, 3.2],
+    [24.5, 13.2, 4.4, 2.8],
+    [31.5, 13.2, 4.4, 2.8],
+  ].map(([x, y, w, h]) => rect(x, y, w, h, 0.8, { fill: GLASS, stroke: INK, sw: 1.2 })),
+  line('M2 37.6q4-3 8 0t8 0t8 0t8 0t8 0t8 0t8 0t6 0', '#0891b2', 2.4),
+]
+
+const TRAIN: Shape[] = [
+  path('M4 12.5H47Q59.5 12.5 61 25V31H4Z', { fill: '#7c3aed', ...OUTLINE }, true),
+  line('M4 25.5H61', '#ffffff', 2.4),
+  rect(8, 16, 7, 6, 1.2, { fill: GLASS, stroke: INK, sw: 1.4 }),
+  rect(18, 16, 7, 6, 1.2, { fill: GLASS, stroke: INK, sw: 1.4 }),
+  rect(28, 16, 7, 6, 1.2, { fill: GLASS, stroke: INK, sw: 1.4 }),
+  path('M38.5 16H46Q52 16 55.5 22H38.5Z', { fill: GLASS, stroke: INK, sw: 1.4 }),
+  line('M24 12.5 28 6.8H38L42 12.5M28 6.8H38', INK, 1.6),
+  rect(57.2, 26.4, 2.4, 2.4, 0.8, { fill: '#fde047' }),
+  line('M0 38H64', INK, 1.6),
+  wheel(14, 33.6, 3.8),
+  wheel(25, 33.6, 3.8),
+  wheel(44, 33.6, 3.8),
+  wheel(55, 33.6, 3.8),
+]
+
+const PLANE: Shape[] = [
+  path('M6 20.5 3.5 8.5H10.5L18.5 18.5Z', { fill: '#db2777', ...OUTLINE }),
+  path('M6.5 22Q6.5 17.2 15 17H49Q60.5 17 62.5 21.8Q60.5 26.6 49 26.6H15Q6.5 26.6 6.5 22Z', { fill: '#ffffff', ...OUTLINE }, true),
+  path('M27.5 24 21 35.5H29.5L42 24Z', { fill: '#db2777', ...OUTLINE }),
+  path('M26 20.5 20 9.5H27.5L38 19.5Z', { fill: '#f472b6', ...OUTLINE }),
+  ...[
+    [14, 19.4],
+    [20, 19.4],
+    [30, 19.4],
+    [36, 19.4],
+  ].map(([x, y]) => rect(x, y, 3.6, 3, 1, { fill: GLASS, stroke: INK, sw: 1.2 })),
+  path('M51 19.2Q57.5 19.2 59.2 21.8H51Z', { fill: GLASS, stroke: INK, sw: 1.2 }),
+  rect(32, 26, 9, 3.4, 1.7, { fill: '#e2e8f0', stroke: INK, sw: 1.4 }),
+]
+
+const ROAD: Record<VehicleKind, (color: string) => Shape[]> = {
+  campervan,
+  'iveco-daily': ivecoDaily,
+  'retro-bus': retroBus,
+  motorhome,
+  caravan: carWithCaravan,
+  offroad,
+}
+
+const OTHER: Record<Exclude<LegMode, 'drive'>, Shape[]> = { ferry: FERRY, train: TRAIN, flight: PLANE }
+
+/** Most vehicle looks kept at once: a colour being dragged in the picker makes a new one per step, and only the latest matter. */
+const SHAPE_CACHE_LIMIT = 24
+const cache = createLru<string, Shape[]>(SHAPE_CACHE_LIMIT)
+
+/** How many looks are cached (for tests). */
+export const shapeCacheSize = (): number => cache.size
+
+/** The shapes of the trip's vehicle (`vehicle` as the trip stores it; anything unusable is the campervan). */
+function roadShapes(vehicle: TripVehicle | undefined): Shape[] {
+  const { kind, color } = resolveVehicle(vehicle)
+  const key = `${kind}|${color}`
+  let shapes = cache.get(key)
+  if (!shapes) {
+    shapes = ROAD[kind](color)
+    cache.set(key, shapes)
+  }
+  return shapes
+}
+
+function shapesFor(mode: LegMode, vehicle: TripVehicle | undefined): Shape[] {
+  return mode === 'drive' ? roadShapes(vehicle) : OTHER[mode]
+}
+
+// ---- As SVG ----------------------------------------------------------------------------------------
+
+function pathSvg(s: PathShape): string {
+  let out = `<path d="${s.d}" fill="${s.fill ?? 'none'}"`
+  if (s.stroke) out += ` stroke="${s.stroke}" stroke-width="${s.sw ?? 2}" stroke-linejoin="round" stroke-linecap="round"`
+  if (s.op !== undefined) out += ` opacity="${s.op}"`
+  return out + '/>'
+}
+
+function shapeSvg(s: Shape): string {
+  if (!('spin' in s)) return pathSvg(s)
+  return `<g class="ride-wheel" style="transform-origin:${s.spin[0]}px ${s.spin[1]}px">${s.parts.map(pathSvg).join('')}</g>`
+}
+
+function svgOf(shapes: readonly Shape[], facing: Facing): string {
+  const inner = shapes.map(shapeSvg).join('')
+  const art = facing === 'west' ? `<g transform="translate(${VEHICLE_BOX.width} 0) scale(-1 1)">${inner}</g>` : inner
+  return `<svg class="ride-art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VEHICLE_BOX.width} ${VEHICLE_BOX.height}" width="${VEHICLE_DRAW_WIDTH}" height="${(VEHICLE_DRAW_WIDTH * VEHICLE_BOX.height) / VEHICLE_BOX.width}" aria-hidden="true">${art}</svg>`
+}
+
+/** The trip's vehicle as an SVG string (56 × 35 px by default), facing east or, mirrored, west. */
+export function vehicleSvg(vehicle?: TripVehicle, facing: Facing = 'east'): string {
+  return svgOf(roadShapes(vehicle), facing)
+}
+
+/** What carries the traveller on a stretch of `mode`: the trip's vehicle on the road, a ferry, train or plane otherwise. */
+export function transportSvg(mode: LegMode, vehicle?: TripVehicle, facing: Facing = 'east'): string {
+  return svgOf(shapesFor(mode, vehicle), facing)
+}
+
+// ---- On a canvas -------------------------------------------------------------------------------------
+
+/** The 2D context of a canvas or an offscreen canvas. */
+export type VehicleContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+
+export interface DrawOptions {
+  /** How far the wheels have turned (radians). */
+  wheelAngle?: number
+  /** A soft white glow round the outline, like the ride's on the map: lifts the vehicle off busy or dark ground. */
+  halo?: boolean
+}
+
+const paths = new WeakMap<PathShape, Path2D>()
+const path2d = (s: PathShape): Path2D => {
+  let p = paths.get(s)
+  if (!p) {
+    p = new Path2D(s.d)
+    paths.set(s, p)
+  }
+  return p
+}
+
+/** `alpha` is the context's own opacity when drawing began: a shape's opacity multiplies it, so a caller can fade the whole vehicle. */
+function paintShape(ctx: VehicleContext, s: PathShape, alpha: number): void {
+  const p = path2d(s)
+  ctx.globalAlpha = alpha * (s.op ?? 1)
+  if (s.fill) {
+    ctx.fillStyle = s.fill
+    ctx.fill(p)
+  }
+  if (s.stroke) {
+    ctx.strokeStyle = s.stroke
+    ctx.lineWidth = s.sw ?? 2
+    ctx.stroke(p)
+  }
+}
+
+function drawShapes(ctx: VehicleContext, shapes: readonly Shape[], x: number, y: number, facing: Facing, width: number, { wheelAngle = 0, halo = false }: DrawOptions): void {
+  const scale = width / VEHICLE_BOX.width
+  const alpha = ctx.globalAlpha
+  ctx.save()
+  try {
+    ctx.translate(x, y)
+    ctx.scale(facing === 'west' ? -scale : scale, scale)
+    ctx.translate(-VEHICLE_ANCHOR.x, -VEHICLE_ANCHOR.y)
+    ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+    if (halo) {
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.95)'
+      ctx.shadowBlur = Math.max(2, width / 16)
+      for (const s of shapes) if (!('spin' in s) && s.hull) paintShape(ctx, s, alpha)
+      ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+      ctx.shadowBlur = 0
+    }
+    for (const s of shapes) {
+      if (!('spin' in s)) {
+        paintShape(ctx, s, alpha)
+        continue
+      }
+      ctx.save()
+      ctx.translate(s.spin[0], s.spin[1])
+      ctx.rotate(wheelAngle)
+      ctx.translate(-s.spin[0], -s.spin[1])
+      for (const part of s.parts) paintShape(ctx, part, alpha)
+      ctx.restore()
+    }
+  } finally {
+    ctx.restore()
+  }
+}
+
+/**
+ * Paint the trip's vehicle on a canvas, as `vehicleSvg` draws it. `(x, y)` is where it touches its line
+ * (the middle of its wheels, in the canvas's current coordinates); `width` is how wide the whole 64 × 40
+ * picture is drawn (the ride uses 56). The context's `globalAlpha` fades the whole vehicle (the shapes with their own
+ * opacity multiply it). Its transform, alpha, shadow and line styles are left as they were. Needs `Path2D` (every browser, and workers).
+ */
+export function drawVehicle(
+  ctx: VehicleContext,
+  vehicle: TripVehicle | undefined,
+  x: number,
+  y: number,
+  facing: Facing = 'east',
+  width = VEHICLE_DRAW_WIDTH,
+  options: DrawOptions = {},
+): void {
+  drawShapes(ctx, roadShapes(vehicle), x, y, facing, width, options)
+}
+
+/** Like `drawVehicle`, for a stretch of `mode`: the trip's vehicle on the road, a ferry, train or plane otherwise. */
+export function drawTransport(
+  ctx: VehicleContext,
+  mode: LegMode,
+  vehicle: TripVehicle | undefined,
+  x: number,
+  y: number,
+  facing: Facing = 'east',
+  width = VEHICLE_DRAW_WIDTH,
+  options: DrawOptions = {},
+): void {
+  drawShapes(ctx, shapesFor(mode, vehicle), x, y, facing, width, options)
 }

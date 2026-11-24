@@ -6,6 +6,7 @@ import { SAMPLE_TRIP_URL } from '../../services/config'
 import { findRecentTrip, pushRecentTrip, removeRecentTrip } from '../../store/recentTrips'
 import { useRouteStore } from '../../store/routeStore'
 import { clearHistory, undo, useTripStore } from '../../store/tripStore'
+import { withPreferredVehicle } from '../../store/vehiclePreference'
 import type { Trip, TripFile } from '../../types/trip'
 import { getMap } from '../map/mapInstance'
 import { editingLockedReason } from '../ride/rideStore'
@@ -79,13 +80,17 @@ export async function replaceOpenTrip(file: TripFile, what: string): Promise<boo
 // ---------------------------------------------------------------------------------------------
 // Opening what the user chose
 
-/** Open the text of a trip file (a picked or dropped file, the sample) in place of the open trip. */
-export async function openTripText(text: string, name: string): Promise<boolean> {
+/**
+ * Open the text of a trip file (a picked or dropped file, the sample) in place of the open trip. A file keeps
+ * its own vehicle; `withPreferredVehicle` (the sample) gives one that has none the vehicle chosen last.
+ */
+export async function openTripText(text: string, name: string, { withPreferredVehicle: usePreference = false } = {}): Promise<boolean> {
   const parsed = parseTripJson(text)
   if (!parsed.ok) {
     toast.error(`Could not open ${name}. ${parsed.error}`)
     return false
   }
+  if (usePreference) parsed.file.trip = withPreferredVehicle(parsed.file.trip)
   if (!(await replaceOpenTrip(parsed.file, name))) return false
   const { title, places } = parsed.file.trip
   toast.success(`Opened ${quoted(title)} (${placesText(places.length)}).${repairNote(parsed.warnings)}`, {
@@ -120,7 +125,7 @@ export async function loadSampleTrip(): Promise<void> {
     toast.error(`Could not load the sample trip. ${err instanceof TripSourceError ? err.message : ''}`.trim())
     return
   }
-  await openTripText(text, 'the sample trip')
+  await openTripText(text, 'the sample trip', { withPreferredVehicle: true })
 }
 
 /** Bring a recent trip back (the newest when no id is given). The open trip takes its place in the list. */

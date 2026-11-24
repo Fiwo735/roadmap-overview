@@ -599,6 +599,8 @@ test.describe('camera', () => {
   })
 
   test('Follow keeps the van in view at a steady zoom while it drives across the trip', async ({ page, app }) => {
+    // Drives a whole trip at 4x (~15-20 s alone); on a loaded machine that can exceed the default 30 s.
+    test.slow()
     await openTrip(page, app, 'Paris', 'Lyon', 'Zurich', 'Vienna')
     await startRide(page, app)
     await page.evaluate(() => {

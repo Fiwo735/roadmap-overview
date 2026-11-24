@@ -243,8 +243,8 @@ function HudPanel({ timeline }: { timeline: Timeline }) {
             onChange={(v) => setRideSpeed(Number(v) as RideSpeed)}
           />
           <IconButton
-            label="Follow the van"
-            tooltip={follow ? 'Stop following the van (show the whole trip)' : 'Follow the van with the camera'}
+            label="Follow the vehicle"
+            tooltip={follow ? 'Stop following the vehicle (show the whole trip)' : 'Follow the vehicle with the camera'}
             icon={<Crosshair size={18} />}
             aria-pressed={follow}
             onClick={() => setRideFollow(!follow)}

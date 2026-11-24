@@ -462,3 +462,55 @@ describe('parseTripFile: a route\'s distance must fit its geometry', () => {
     expect(forged.ok && forged.file.routes).toEqual({})
   })
 })
+
+describe('parseTripFile: the vehicle', () => {
+  const withVehicle = (vehicle: unknown) => {
+    const file = fileFor(sampleTrip())
+    file.trip.vehicle = vehicle
+    return file
+  }
+
+  it('has none when the file has none (the default campervan)', () => {
+    const res = ok(fileFor(sampleTrip()))
+    expect(res.file.trip).not.toHaveProperty('vehicle')
+    expect(res.warnings).toEqual([])
+  })
+
+  it('round-trips a vehicle with and without a colour', () => {
+    const daily = { ...sampleTrip(), vehicle: { kind: 'iveco-daily' as const } }
+    expect(ok(fileFor(daily)).file.trip).toEqual(daily)
+    const red = { ...sampleTrip(), vehicle: { kind: 'retro-bus' as const, color: '#d4382c' } }
+    const res = ok(fileFor(red))
+    expect(res.file.trip).toEqual(red)
+    expect(res.warnings).toEqual([])
+  })
+
+  it('writes the vehicle into the file', () => {
+    const trip = { ...sampleTrip(), vehicle: { kind: 'iveco-daily' as const } }
+    expect(serializeTripFile(trip).trip.vehicle).toEqual({ kind: 'iveco-daily' })
+  })
+
+  it('reads the default campervan as no vehicle, and normalises the colour', () => {
+    expect(ok(withVehicle({ kind: 'campervan' })).file.trip).not.toHaveProperty('vehicle')
+    expect(ok(withVehicle({ kind: 'offroad', color: '#3F9560' })).file.trip.vehicle).toEqual({ kind: 'offroad' })
+    expect(ok(withVehicle({ kind: 'offroad', color: '#ABCDEF' })).file.trip.vehicle).toEqual({ kind: 'offroad', color: '#abcdef' })
+  })
+
+  it('uses the campervan for an unknown kind, with a warning', () => {
+    const res = ok(withVehicle({ kind: 'hovercraft' }))
+    expect(res.file.trip).not.toHaveProperty('vehicle')
+    expect(res.warnings.some((w) => w.includes('hovercraft'))).toBe(true)
+  })
+
+  it("uses the vehicle's own colour for a bad one, with a warning, and keeps the kind", () => {
+    const res = ok(withVehicle({ kind: 'motorhome', color: 'rgb(1,2,3)' }))
+    expect(res.file.trip.vehicle).toEqual({ kind: 'motorhome' })
+    expect(res.warnings.some((w) => /colour/.test(w))).toBe(true)
+  })
+
+  it.each([['a string', 'iveco-daily'], ['a list', []], ['a number', 7]])('uses the campervan when the vehicle is %s', (_label, vehicle) => {
+    const res = ok(withVehicle(vehicle))
+    expect(res.file.trip).not.toHaveProperty('vehicle')
+    expect(res.warnings).toHaveLength(1)
+  })
+})

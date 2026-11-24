@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Trip } from '../types/trip'
 import { createTrip } from '../lib/trip'
 import { clearHistory, redo, undo, useTripStore, withoutHistory } from './tripStore'
@@ -323,6 +323,88 @@ describe('trip metadata', () => {
     s().setStartDate('2026-07-04')
     s().setStartDate('04/07/2026')
     expect(s().trip.startDate).toBe('2026-07-04')
+  })
+})
+
+describe('the vehicle', () => {
+  it('chooses a vehicle and a colour as one undo step each', () => {
+    expect(s().trip).not.toHaveProperty('vehicle')
+    s().setVehicle('iveco-daily')
+    expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily' })
+    s().setVehicle('retro-bus', '#D4382C')
+    expect(s().trip.vehicle).toEqual({ kind: 'retro-bus', color: '#d4382c' })
+    expect(temporal().pastStates).toHaveLength(2)
+    undo()
+    expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily' })
+    undo()
+    expect(s().trip).not.toHaveProperty('vehicle')
+    redo()
+    expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily' })
+  })
+
+  it('stores the default campervan as no vehicle at all', () => {
+    s().setVehicle('offroad')
+    s().setVehicle('campervan')
+    expect(s().trip).not.toHaveProperty('vehicle')
+    s().setVehicle('campervan', '#ffffff')
+    expect(s().trip).not.toHaveProperty('vehicle')
+  })
+
+  it('records nothing for a choice that changes nothing', () => {
+    s().setVehicle('campervan')
+    expect(temporal().pastStates).toHaveLength(0)
+    s().setVehicle('caravan', '#2F6FD1')
+    s().setVehicle('caravan')
+    s().setVehicle('caravan', '#2f6fd1')
+    expect(temporal().pastStates).toHaveLength(1)
+    s().setVehicle('iveco-daily', '#ff0000')
+    s().setVehicle('iveco-daily')
+    expect(temporal().pastStates).toHaveLength(2)
+  })
+
+  it('ignores an unknown kind and a bad colour', () => {
+    s().setVehicle('hovercraft' as never)
+    expect(s().trip).not.toHaveProperty('vehicle')
+    s().setVehicle('motorhome', 'blue')
+    expect(s().trip.vehicle).toEqual({ kind: 'motorhome' })
+  })
+
+  it('goes with the trip: replaceTrip carries it, newTrip drops it, and both undo', () => {
+    s().setVehicle('iveco-daily')
+    const mine = s().trip
+    s().replaceTrip(createTrip({ id: 'other', vehicle: { kind: 'offroad' } }))
+    expect(s().trip.vehicle).toEqual({ kind: 'offroad' })
+    undo()
+    expect(s().trip).toBe(mine)
+    s().newTrip()
+    expect(s().trip).not.toHaveProperty('vehicle')
+    undo()
+    expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily' })
+  })
+})
+
+describe('new trips and the remembered vehicle', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('starts a new trip with the vehicle the user chose last, one undo step that brings the old trip back', () => {
+    const data = new Map<string, string>([['roadmap-overview:vehicle', '{"kind":"iveco-daily"}']])
+    vi.stubGlobal('localStorage', { getItem: (k: string) => data.get(k) ?? null, setItem: () => {}, removeItem: () => {} })
+    s().setVehicle('offroad')
+    const before = s().trip
+    s().newTrip()
+    expect(s().trip.vehicle).toEqual({ kind: 'iveco-daily' })
+    expect(s().trip.places).toEqual([])
+    expect(temporal().pastStates).toHaveLength(2)
+    undo()
+    expect(s().trip).toBe(before)
+  })
+
+  it('does not let the remembered vehicle into a trip that is replaced', () => {
+    vi.stubGlobal('localStorage', { getItem: () => '{"kind":"iveco-daily"}', setItem: () => {}, removeItem: () => {} })
+    s().replaceTrip(createTrip({ id: 'opened' }))
+    expect(s().trip).not.toHaveProperty('vehicle')
   })
 })
 

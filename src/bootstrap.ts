@@ -5,8 +5,9 @@ import { getMap } from './features/map/mapInstance'
 import { initTheme } from './features/theme/theme'
 import { restoreSavedTrip, startAutosave } from './store/persistence'
 import { useRouteStore } from './store/routeStore'
-import { useTripStore } from './store/tripStore'
+import { useTripStore, withoutHistory } from './store/tripStore'
 import { useUiStore } from './store/uiStore'
+import { withPreferredVehicle } from './store/vehiclePreference'
 import type {} from './types/debug'
 
 /** Selection and hover ids that no longer exist (after undo, delete, import) must not linger. */
@@ -31,9 +32,12 @@ function keepSelectionValid(): void {
 export function bootstrap(): void {
   initTheme()
 
-  if (restoreSavedTrip() === 'corrupt') {
+  const restored = restoreSavedTrip()
+  if (restored === 'corrupt') {
     toast.error('Your last trip could not be restored, so a new one was started.')
   }
+  // A new trip starts with the vehicle chosen last; a restored trip keeps its own.
+  if (restored !== 'restored') withoutHistory(() => useTripStore.setState((s) => ({ trip: withPreferredVehicle(s.trip) })))
   startAutosave()
   startCrossTabSync()
   keepSelectionValid()

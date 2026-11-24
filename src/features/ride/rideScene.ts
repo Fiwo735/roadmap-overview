@@ -19,7 +19,8 @@ import { legStyle } from '../routing/legStyle'
 import { comfortBox, glideOffset, insideBox, inView, medianOf, nextFacing, type Facing } from './camera'
 import { prefersReducedMotion, rideSample, setRideFollow, useRideStore, type RideState } from './rideStore'
 import { sampleTimeline, type LegSlot, type RideSample, type Timeline } from './timeline'
-import { vehicleSvg } from './vehicles'
+import { resolveVehicle } from '../../lib/vehicles'
+import { transportSvg } from './vehicles'
 import './ride.css'
 
 /** Panes whose contents must not be touched while riding (dragging, via handles, menus, hit lines); see `lockEditing`. */
@@ -166,7 +167,7 @@ export function createRideScene(map: LeafletMap): { destroy: () => void } {
   const vehicleIcon = divIcon({
     className: 'ride-vehicle-wrap',
     html:
-      '<div class="ride-vehicle" data-testid="ride-vehicle" data-facing="east" data-vehicle="drive" data-moving="false"></div>' +
+      '<div class="ride-vehicle" data-testid="ride-vehicle" data-facing="east" data-vehicle="drive" data-vehicle-kind="campervan" data-moving="false"></div>' +
       '<span class="ride-day-tag" data-testid="ride-day-tag"></span>',
     iconSize: VAN_SIZE,
     iconAnchor: VAN_ANCHOR,
@@ -174,7 +175,7 @@ export function createRideScene(map: LeafletMap): { destroy: () => void } {
   const vehicle = leafletMarker([0, 0], { icon: vehicleIcon, pane: PANES.ride, interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map)
   const vehicleEl = (): HTMLElement | null => vehicle.getElement()?.firstElementChild as HTMLElement | null
   const dayTagEl = (): HTMLElement | null => vehicle.getElement()?.lastElementChild as HTMLElement | null
-  let shown: LegMode | null = null
+  let shown: string | null = null
   let shownDay: number | null = null
   let facing: Facing | null = null
   let doneCount = -1
@@ -291,16 +292,27 @@ export function createRideScene(map: LeafletMap): { destroy: () => void } {
     return clipPath(slot.path, slot.spans, upTo)
   }
 
+  /** What the vehicle looks like on a stretch of `mode`: the trip's own vehicle on the road, a ferry, train or plane otherwise. */
+  function showLook(mode: LegMode) {
+    const el = vehicleEl()
+    if (!el) return
+    const tripVehicle = useTripStore.getState().trip.vehicle
+    const { kind, color } = resolveVehicle(tripVehicle)
+    const look = mode === 'drive' ? `drive|${kind}|${color}` : mode
+    if (look === shown) return
+    shown = look
+    el.innerHTML = transportSvg(mode, tripVehicle)
+    el.dataset.vehicle = mode
+    el.dataset.vehicleKind = mode === 'drive' ? kind : mode
+    el.dataset.vehicleColor = mode === 'drive' ? color : ''
+  }
+
   function render(sample: RideSample) {
     latest = sample
     vehicle.setLatLng([sample.position.lat, sample.position.lng])
+    showLook(sample.mode)
     const el = vehicleEl()
     if (el) {
-      if (sample.mode !== shown) {
-        shown = sample.mode
-        el.innerHTML = vehicleSvg(sample.mode)
-        el.dataset.vehicle = sample.mode
-      }
       const next = nextFacing(facing, sample.heading)
       if (next !== facing) {
         facing = next
@@ -395,6 +407,10 @@ export function createRideScene(map: LeafletMap): { destroy: () => void } {
   map.on('zoomend moveend', onZoomEnd)
 
   const unsubscribe = useRideStore.subscribe(onState)
+  // Editing is locked, but a replaced trip may bring another vehicle before the ride ends.
+  const unsubscribeTrip = useTripStore.subscribe((s, prev) => {
+    if (s.trip.vehicle !== prev.trip.vehicle && latest) showLook(latest.mode)
+  })
   const first = useRideStore.getState()
   if (first.timeline) {
     load(first.timeline)
@@ -407,6 +423,7 @@ export function createRideScene(map: LeafletMap): { destroy: () => void } {
   return {
     destroy() {
       unsubscribe()
+      unsubscribeTrip()
       map.off('dragstart', onDragStart)
       map.off('zoomstart', onZoomStart)
       map.off('zoomend moveend', onZoomEnd)

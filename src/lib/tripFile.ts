@@ -5,6 +5,7 @@ import { decodePolylineUncached } from './polyline'
 import { legRouteKey } from './routeKey'
 import { areValidSpans } from './routeSpans'
 import { DEFAULT_TRIP_TITLE, defaultDayAt, isCalendarDate, isLegMode, normalizeDay, syncLegs } from './trip'
+import { parseVehicle } from './vehicles'
 
 export const TRIP_FILE_FORMAT = 'roadmap-overview/trip'
 export const TRIP_FILE_VERSION = 1
@@ -230,6 +231,8 @@ function parseTrip(raw: unknown, warnings: string[]): Trip {
   }
   if (typeof raw.subtitle === 'string' && raw.subtitle) trip.subtitle = raw.subtitle
   if (typeof raw.startDate === 'string' && isCalendarDate(raw.startDate)) trip.startDate = raw.startDate
+  const vehicle = parseVehicle(raw.vehicle, warnings)
+  if (vehicle) trip.vehicle = vehicle
   return trip
 }
 

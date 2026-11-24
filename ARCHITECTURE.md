@@ -55,7 +55,7 @@ src/
   lib/                       framework-free helpers — unit-tested with Vitest:
                              geo (haversine, bounds), polyline (encode/decode + memo), format,
                              id, trip (defaults, day rules, syncLegs), tripFile (parse/serialize),
-                             routeKey, modes, geoResult (Nominatim result → GeoResult, short name),
+                             routeKey, modes, vehicles (kinds, names, colours, `parseVehicle`), geoResult (Nominatim result → GeoResult, short name),
                              requestQueue (politeness queue), lru, nearest (point-to-path projection,
                              insert index, via-point index), simplify (Douglas–Peucker),
                              manualRoute (routes that need no router), greatCircle (flight arcs),
@@ -83,8 +83,9 @@ src/
     stats/                   title/statistics card (StatsOverlay → TripCard | TripPill), computeStats,
                              countries (+ countryIndex, worldIndex, countryData), flags, dateRange, samplePath
     io/                      FileMenu (top bar), import/export actions, drop overlay, start-up links (F5), cross-tab sync (F8)
-    ride/                    RideButton, RideHud (day, leg, controls), RideLayer + rideScene (van, trail, camera),
-                             rideStore (playback + controls), timeline (the pure ride clock), camera, vehicles
+    ride/                    RideButton (+ VehiclePicker, the chevron joined to it), RideHud (day, leg, controls), RideLayer +
+                             rideScene (van, trail, camera), rideStore (playback + controls), timeline (the pure ride clock),
+                             camera, vehicles (the artwork; SVG and canvas)
     export-image/            image export (F7): ExportImageButton → ExportDialog, the canvas renderer
                              (renderTripImage + geometry, card, legend, labelPlacement, paint, …)
     help/                    HelpDialog (how-tos + the shortcut table in `shortcutList.ts`), HelpButton, `?` key
@@ -131,6 +132,9 @@ See `src/types/trip.ts`. Key rules:
   route's duration (OSRM for drive legs, `estimateDurationS()` for the other modes).
 - **Modes.** `src/lib/modes.ts` defines colours, dashes and speed estimates per mode. Map,
   sidebar and image export all read from it.
+- **Vehicle** (F14). `Trip.vehicle?: { kind: VehicleKind; color?: string }` is the vehicle the ride drives on road stretches;
+  missing means the default campervan. It is intent (undoable, autosaved, exported, in share links) and kept **canonical**: the
+  default campervan, a vehicle's own colour and a colour on a kind that has only one are stored as nothing (`canonicalVehicle`).
 
 ## State
 
@@ -784,7 +788,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   look at ride internals. Any trip change that still gets through is handled by the rebuild/close rule above.
 - **Map** (`rideScene.ts`, mounted by `RideLayer` only while a ride is on; `destroy()` restores the view, the
   panes and the container class): the vehicle is a Leaflet marker in the `ride` pane with an SVG per
-  vehicle (`vehicles.ts`: campervan, ferry, train, plane; all side views facing east, ~56 × 35 px). It
+  vehicle (`vehicles.ts`: the trip's own vehicle on the road — F14 — and the ferry, train and plane; all side views facing east, ~56 × 35 px). It
   **mirrors** to face west — `nextFacing()` turns only once the heading is ≥ 15° past north/south, so
   wiggly roads do not flip it — and is never rotated. Wheels spin and the body bobs while it moves;
   parked (rest day, the end) it stands beside its stop's badge. A small "Day N" tag rides above it.
@@ -1058,6 +1062,65 @@ rules (the tile usage policy requires visible attribution as well).
   clipboard in both modes; the downloaded file has the tEXt chunk in both modes; the credit choice is in view in an 800 px tall
   window; the choice persists across reload; a damaged stored value falls back to the caption.
 - **Known gaps**: the caption is not translated or customisable; the in-image credit is only ever in a corner.
+
+### F14 — choose the vehicle (including a black Iveco Daily)
+
+- **Contract** (additive, optional, no version bump): `Trip.vehicle?: TripVehicle` = `{ kind: VehicleKind; color?: string }`,
+  `VehicleKind = 'campervan' | 'iveco-daily' | 'retro-bus' | 'motorhome' | 'caravan' | 'offroad'` (types/trip.ts). Missing = the
+  campervan of F6, so every older file and link is unchanged. `src/lib/vehicles.ts` (pure, tested) is the registry — `VEHICLES`
+  (label, default colour, `colorable`), `VEHICLE_KINDS` (picker order), `COLOR_PRESETS`, colour maths (`parseColor`,
+  `normalizeColor` → lower-case `#rrggbb`, `mixColors`, `lighten`, `darken`, `luminance`), `resolveVehicle` (whatever state a
+  vehicle is in → `{ kind, color }`), `canonicalVehicle`, `sameVehicle` and `parseVehicle`. `parseTripFile` runs `parseVehicle`: an unknown
+  kind → the campervan, a bad colour → the vehicle's own colour, a non-object → none, each with a warning (so the open toast says it); the
+  stored form is canonical, so equal vehicles have equal fingerprints. The Iveco Daily is **not colourable** (its name says black): a colour
+  on it is dropped. `tripStore.setVehicle(kind, color?)` is one `edit` (one undo step; a choice that changes nothing records nothing;
+  an unknown kind or a bad colour is ignored). **The last choice is remembered** (`store/vehiclePreference.ts`, `localStorage["roadmap-overview:vehicle"]`, the canonical vehicle as JSON,
+  absent for the default campervan): only a choice made in the picker writes it (not undo, not opening a trip). It is the vehicle of a **new** trip:
+  `newTrip()` (File → New trip), the empty trip of a first visit or a corrupt autosave (`bootstrap`, with history paused: no undo step) and the sample
+  trip when it has none of its own (`openTripText(…, { withPreferredVehicle })`). A restored autosave, an opened file or a link keeps its own vehicle.
+  Starting a new trip is one undo step that brings the old trip, and its vehicle, back.
+- **Artwork** (`features/ride/vehicles.ts`, framework-free: no React, no Leaflet). Every picture is a list of shapes in a 64 × 40 box
+  (`VEHICLE_BOX`, anchor `VEHICLE_ANCHOR` = the middle of the wheels, ground at y ≈ 36.7): SVG path data with fill / stroke / opacity, plus
+  *wheels* (a group that turns about its centre). One description feeds two renderers, so SVG and canvas cannot drift:
+  `vehicleSvg(vehicle, facing = 'east')` and `transportSvg(mode, vehicle, facing)` return an SVG string (56 × 35 px; `facing: 'west'` wraps it
+  in `scale(-1 1)`; wheels carry `class="ride-wheel"` for the CSS spin), and **`drawVehicle(ctx, vehicle, x, y, facing, width = 56, { wheelAngle,
+  halo })`** / `drawTransport(ctx, mode, vehicle, …)` paint the same shapes on a `CanvasRenderingContext2D` or `OffscreenCanvasRenderingContext2D`
+  with `Path2D` (`(x, y)` is where the wheels touch the line, `width` the width of the whole 64-unit box; the context's transform and styles are
+  restored; `halo` draws the soft white glow the map version has, which a black van needs on dark ground; shapes and `Path2D`s are cached, so a
+  frame costs one fill/stroke per shape; the cache is a 24-entry LRU, so the colours tried in a picker drag do not pile up). A shape's own opacity
+  multiplies the context's `globalAlpha` at the start of the call, so a caller can fade the whole vehicle; the alpha is given back. `transportSvg` / `drawTransport` choose by the stretch's mode: the trip's vehicle on `drive`,
+  the ferry, train or plane (now in the same shape model) otherwise. Body colours go through `toneOf` (roof/panel tone) and `accentFor`
+  (stripe: orange/blue/white that does not vanish on the body). The campervan with no colour chosen draws exactly as in F6. The six vehicles:
+  campervan, **Iveco Daily (black)** — long-wheelbase high-roof panel van, short steep bonnet, large upright windscreen, sliding door,
+  dark glass, big mirror, grey wheels in dark arches, pale roof edge and crease lines so the black body keeps its shape — retro camper bus
+  (two-tone, split windows, round lamp), coachbuilt motorhome (over-cab Luton), car with caravan, 4×4 with roof tent and spare wheel. No badges.
+- **Ride**: `rideScene.showLook(mode)` draws `transportSvg(mode, trip.vehicle)` and sets `data-vehicle` (the *mode*, as before: `drive`, `ferry`,
+  …), **`data-vehicle-kind`** (the trip's kind on a road stretch, else `ferry` / `train` / `flight`) and `data-vehicle-color` on
+  `[data-testid=ride-vehicle]`; it re-runs when `trip.vehicle` changes (a replaced trip while a ride runs). Size, anchor, mirroring,
+  bobbing and the day tag are unchanged.
+- **Picker** (`ride/VehiclePicker.tsx`, `vehicle.css`): `RideButton` now renders a `.ride-split` (Ride + the chevron `vehicle-button`, 26 px
+  wide, joined; its name is "Choose vehicle (currently <label>)", and the Ride tooltip says "Ride the route day by day. Vehicle: <label>"). The chevron opens a popover portalled to `<body>` (below the button, right edges aligned, clamped into the window): a 2 × 3
+  grid of cards (`role="radio"`, a picture on a patch of light map, the name) and, for colourable vehicles, nine preset swatches plus a custom
+  colour (native `<input type=color>`, committed on its `change` event so a drag is **one** undo step) or, for the Daily, a note that its
+  colour is fixed. Switching vehicle starts in the new vehicle's own colour; the checked card shows the colour in use (or being tried).
+  Keys: arrows move the focus (they do not choose, as in `SegmentedControl`), Enter/Space choose, Escape closes and returns the focus,
+  Tab out of the panel closes it; a click outside, scrolling or resizing closes it too. **Locked** while a ride runs or in presentation mode
+  (`aria-disabled` + `aria-describedby` + tooltip: "Close the ride (Esc) to change the vehicle." / "Leave presentation mode (Esc) to change the
+  vehicle."); a lock that begins while it is open closes it (store subscriptions, not an effect). Testids: `vehicle-button`
+  (`data-vehicle-kind`), `vehicle-panel`, `vehicle-option` (`data-kind`, `aria-checked`), `vehicle-color` (`data-color`),
+  `vehicle-color-custom`, `vehicle-colors-note`.
+- **Docs**: Help ("Show it") and README (Ride section, the file format) mention the picker and the `vehicle` field.
+- **Tests**: Vitest — `lib/vehicles.test.ts` (registry, colours, resolve/canonical/parse), `tripFile.test.ts` (`vehicle`: round trip, unknown kind,
+  bad colour, junk), `tripStore.test.ts` (`setVehicle`: undo, canonical form, no-ops, replace/new trip, a new trip with the remembered vehicle), `store/vehiclePreference.test.ts` (remember, forget, repair, blocked storage), `ride/vehicles.test.ts` (every kind
+  as a well-formed SVG, colours, the Daily's fixed colour, facing, the canvas API against a recording context with a stubbed `Path2D`: balanced
+  save/restore, mirroring, wheel angle, halo, caller's opacity multiplied in and restored, styles restored, `Path2D` reuse, bounded cache). Playwright (`e2e/vehicle.spec.ts`, mocked): the picker beside Ride,
+  choosing the Daily → trip + ride (`data-vehicle-kind`), every vehicle rides, one undo step / undo / redo, survives a reload, in the saved file,
+  travels in a share link and opens from it, a damaged link repairs with a warning, New trip / first visit / sample with the remembered vehicle (and files, links, saved trips keeping theirs), colours (swatch, back to the own colour, per-vehicle
+  default, custom, the Daily), keyboard, Tab, outside click, both themes and a phone, the lock during a ride and in presentation mode (and a lock
+  beginning while open), ferries keep the ferry, west facing, same size for all vehicles.
+- **Known gaps**: the vehicle pictures are drawn by hand and recognisable rather than exact (the Daily is a generic long, high-roof panel
+  van with its proportions, not a licensed likeness); the picker's previews are not animated; a vehicle other than the campervan is not shown in
+  the README screenshots; the remembered vehicle is per browser (not synced between devices), and re-clicking the checked vehicle also remembers it; the image export does not draw the vehicle (the video export that will can call `drawVehicle` / `drawTransport`).
 
 ### F15 — deployment to GitHub Pages
 

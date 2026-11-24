@@ -32,7 +32,8 @@ const TOPICS: { id: string; title: string; items: string[] }[] = [
     title: 'Show it',
     items: [
       'The card on the map shows the title, dates, distance, driving time and the countries you pass. Click the title to edit it.',
-      'Ride plays the trip as a little campervan driving day by day; Space pauses it and the arrow keys jump between days.',
+      'Ride plays the trip as a little vehicle driving day by day; Space pauses it and the arrow keys jump between days.',
+      'Choose the vehicle with the arrow next to Ride: a campervan, a black Iveco Daily, a retro bus, a motorhome, a car with a caravan or a 4×4 with a roof tent, most of them in a colour of your choice. It is part of the trip, so it is saved and shared with it, and new trips start with the vehicle you chose last. You cannot change it while a ride runs or in presentation mode.',
       'Presentation mode (P) hides the sidebar and every editing tool, which is what you want for showing a trip to others. Esc leaves it.',
       'Export image (the picture button in the top bar) makes a PNG of the whole trip: pick a size (landscape, portrait, square or A4 print), choose what to show on it, check the preview, then download it or copy it. The map’s OpenStreetMap credit is not drawn on the picture unless you choose “Small, in the image”: post the caption shown under the preview (it has its own Copy button) with the picture. It works in presentation mode too.',
     ],

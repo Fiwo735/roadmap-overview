@@ -1,6 +1,6 @@
 import { temporal } from 'zundo'
 import { create, useStore } from 'zustand'
-import type { LatLng, Leg, Place, Trip } from '../types/trip'
+import type { LatLng, Leg, Place, Trip, VehicleKind } from '../types/trip'
 import { isLat, isLng, isValidLatLng } from '../lib/geo'
 import { newId } from '../lib/id'
 import {
@@ -14,6 +14,8 @@ import {
   type LegPatch,
   type PlacePatch,
 } from '../lib/trip'
+import { canonicalVehicle, isVehicleKind, sameVehicle } from '../lib/vehicles'
+import { withPreferredVehicle } from './vehiclePreference'
 
 /** Fields a caller provides for a new place; `day` defaults per ARCHITECTURE.md. */
 export type NewPlace = Pick<Place, 'name' | 'lat' | 'lng'> &
@@ -29,6 +31,11 @@ export interface TripState {
   setSubtitle: (subtitle: string | undefined) => void
   /** YYYY-MM-DD; empty string or undefined clears it, malformed values are ignored. */
   setStartDate: (date: string | undefined) => void
+  /**
+   * The vehicle that rides the road stretches, with an optional `#rrggbb` body colour. The default
+   * campervan (and a vehicle's own colour) is stored as nothing; an unknown kind or a bad colour is ignored.
+   */
+  setVehicle: (kind: VehicleKind, color?: string) => void
 
   /**
    * Insert a place (appended unless `index` is given) and return its id, or null when the input
@@ -51,7 +58,7 @@ export interface TripState {
 
   /** Swap in a whole trip (import, restore) as ONE undoable step. */
   replaceTrip: (trip: Trip) => void
-  /** Start over with an empty trip, as one undoable step. */
+  /** Start over with an empty trip (with the vehicle the user chose last), as one undoable step. */
   newTrip: () => void
 }
 
@@ -147,6 +154,15 @@ export const useTripStore = create<TripState>()(
             return value === undefined ? rest : { ...rest, startDate: value }
           }),
 
+        setVehicle: (kind, color) =>
+          edit((t) => {
+            if (!isVehicleKind(kind)) return null
+            const vehicle = canonicalVehicle(kind, color)
+            if (sameVehicle(t.vehicle, vehicle)) return null
+            const { vehicle: _old, ...rest } = t
+            return vehicle ? { ...rest, vehicle } : rest
+          }),
+
         addPlace: (input, index) => {
           if (!isLat(input.lat) || !isLng(input.lng)) return null
           const id = newId('p')
@@ -237,7 +253,7 @@ export const useTripStore = create<TripState>()(
 
         replaceTrip: (trip) => edit(() => withSyncedLegs(trip, trip.places)),
 
-        newTrip: () => edit(() => createTrip()),
+        newTrip: () => edit(() => withPreferredVehicle(createTrip())),
       }
     },
     {

@@ -2,13 +2,15 @@ import { useEffect } from 'react'
 import { Play } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { useTooltip } from '../../components/Tooltip'
+import { vehicleLabel } from '../../lib/vehicles'
+import { useTripStore } from '../../store/tripStore'
 import { closeRide, rideDebug, startRide, useRideAvailability, useRideStore } from './rideStore'
+import { VehiclePicker } from './VehiclePicker'
 import './ride.css'
 
-const READY_TIP = 'Watch a campervan drive your route, day by day'
 
 /**
- * Top bar: starts the ride, or closes it while one is on. With fewer than two places, or while a
+ * Top bar: starts the ride, or closes it while one is on, with the vehicle picker (a chevron) joined to it. With fewer than two places, or while a
  * leg is still being routed, it is disabled with the reason as its tooltip; it stays focusable
  * (aria-disabled, not `disabled`) so keyboard and screen-reader users can read why.
  */
@@ -17,7 +19,8 @@ export function RideButton() {
   const active = useRideStore((s) => s.active)
   const blocked = !availability.ok && !active
   const reason = availability.ok ? undefined : availability.reason
-  const tip = useTooltip<HTMLButtonElement>(blocked ? reason : active ? 'Close the ride (Esc)' : READY_TIP)
+  const vehicle = useTripStore((s) => vehicleLabel(s.trip.vehicle))
+  const tip = useTooltip<HTMLButtonElement>(blocked ? reason : active ? 'Close the ride (Esc)' : `Ride the route day by day. Vehicle: ${vehicle}`)
 
   // Dev builds: tests and humans drive the ride through `window.__ROADMAP__.ride`.
   useEffect(() => {
@@ -25,7 +28,7 @@ export function RideButton() {
   }, [])
 
   return (
-    <>
+    <div className="ride-split">
       <Button
         id="ride-button"
         className="ride-button"
@@ -50,6 +53,7 @@ export function RideButton() {
           {reason}
         </span>
       ) : null}
-    </>
+      <VehiclePicker />
+    </div>
   )
 }
