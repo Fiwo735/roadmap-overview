@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 519 128" width="519" height="128" role="img" aria-label="Vanagram (light)">
+  <title>Vanagram (light)</title>
+  <!-- The letters are outlines of Inter SemiBold, (c) 2016 The Inter Project Authors, SIL Open Font License 1.1: docs/brand/LICENSE-Inter.txt -->
+  <style>.lb{display:none}@media (min-height:64px){.lb{display:inline}.ls{display:none}}</style>
+  <g class="ls"><rect width="128" height="128" rx="28" fill="#1a73e8"/><g transform="scale(4)"><path d="M2 18V8Q2 6 4 6H20Q21.4 6 22 7.2L24 14H28Q30 14 30 16V18Z" fill="#0d1219"/>
+  <path d="M16 8H20.4L22 12H16Z" fill="#1a73e8"/>
+  <rect x="14" y="8" width="1" height="9" fill="#1a73e8"/>
+  <rect x="27" y="14.8" width="3" height="2" rx="0.6" fill="#f9ab00"/>
+  <circle cx="11" cy="19" r="5" fill="#1a73e8"/><circle cx="25" cy="19" r="5" fill="#1a73e8"/>
+  <circle cx="11" cy="19" r="3.5" fill="#0d1219"/><circle cx="25" cy="19" r="3.5" fill="#0d1219"/>
+  <circle cx="11" cy="19" r="1.2" fill="#ffffff"/><circle cx="25" cy="19" r="1.2" fill="#ffffff"/>
+  <g fill="#ffffff">
+    <circle cx="5" cy="28" r="2"/>
+    <circle cx="10" cy="28" r="1"/><circle cx="14" cy="28" r="1"/><circle cx="18" cy="28" r="1"/><circle cx="22" cy="28" r="1"/>
+    <circle cx="27" cy="28" r="2"/>
+  </g>
+  <circle cx="27" cy="28" r="1" fill="#f9ab00"/></g></g>
+  <g class="lb" transform="scale(0.25)"><rect width="512" height="512" rx="112" fill="#1a73e8"/><g transform="translate(45 128) scale(0.96)"><rect x="104" y="-14" width="78" height="22" rx="9" fill="#0d1219"/>
+    <path d="M0 160V24Q0 0 24 0H302Q324 0 332 19L359 92Q363 104 377 108L418 118Q440 124 440 142V160Z" fill="#0d1219"/>
+    <path d="M262 32H320L343 88H262Z" fill="#1a73e8" stroke="#1a73e8" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M256 36V150M178 36V150" stroke="#1a73e8" stroke-width="6" stroke-linecap="round"/>
+    <rect x="212" y="96" width="26" height="7" rx="3.5" fill="#ffffff"/>
+    <rect x="414" y="124" width="21" height="14" rx="6" fill="#f9ab00"/>
+    <circle cx="120" cy="164" r="49" fill="#1a73e8"/><circle cx="120" cy="164" r="38" fill="#0d1219"/><circle cx="120" cy="164" r="14" fill="#ffffff"/><circle cx="376" cy="164" r="49" fill="#1a73e8"/><circle cx="376" cy="164" r="38" fill="#0d1219"/><circle cx="376" cy="164" r="14" fill="#ffffff"/></g>
+  <g>
+    <circle cx="113.26" cy="367.74" r="9" fill="#ffffff"/><circle cx="149.78" cy="371.87" r="9" fill="#ffffff"/><circle cx="186.07" cy="377.87" r="9" fill="#ffffff"/><circle cx="222.72" cy="380.24" r="9" fill="#ffffff"/><circle cx="289.28" cy="367.76" r="9" fill="#ffffff"/><circle cx="325.27" cy="370.04" r="9" fill="#ffffff"/><circle cx="360.91" cy="375.91" r="9" fill="#ffffff"/><circle cx="396.75" cy="380.18" r="9" fill="#ffffff"/>
+    <circle cx="70" cy="374" r="23" fill="#ffffff"/>
+    <circle cx="256" cy="374" r="15" fill="#ffffff"/>
+    <circle cx="442" cy="374" r="26" fill="#ffffff"/>
+    <circle cx="442" cy="374" r="11" fill="#f9ab00"/>
+  </g></g>
+  <g fill="#18212f"><path transform="translate(158 91) scale(0.03624 -0.03624)" d="M581 0H919L1441 1490H1149L893 716C851 583 806 420 752 213C697 418 649 584 607 716L343 1490H50Z"/><path transform="translate(206.91 91) scale(0.03624 -0.03624)" d="M450 -23C624 -23 730 58 779 154H789V0H1038V747C1038 1045 792 1132 582 1132C358 1132 174 1037 108 840L349 791C376 865 453 932 583 932C710 932 778 868 778 759V754C778 677 696 674 502 653C286 630 76 566 76 314C76 94 237 -23 450 -23ZM517 170C407 170 328 220 328 317C328 419 416 462 533 478C600 487 745 505 780 533V401C780 277 677 170 517 170Z"/><path transform="translate(248.63 91) scale(0.03624 -0.03624)" d="M398 655C398 817 498 911 637 911C773 911 855 821 855 671V0H1115V711C1115 980 963 1132 733 1132C569 1132 453 1052 387 895L384 1118H138V0H398Z"/><path transform="translate(293.15 91) scale(0.03624 -0.03624)" d="M450 -23C624 -23 730 58 779 154H789V0H1038V747C1038 1045 792 1132 582 1132C358 1132 174 1037 108 840L349 791C376 865 453 932 583 932C710 932 778 868 778 759V754C778 677 696 674 502 653C286 630 76 566 76 314C76 94 237 -23 450 -23ZM517 170C407 170 328 220 328 317C328 419 416 462 533 478C600 487 745 505 780 533V401C780 277 677 170 517 170Z"/><path transform="translate(334.88 91) scale(0.03624 -0.03624)" d="M620 -442C921 -442 1143 -302 1143 -3V1118H888V933H874C834 1012 749 1132 551 1132C293 1132 89 929 89 562C89 198 292 17 549 17C742 17 824 119 864 200H886V-11C886 -171 780 -244 619 -244C456 -244 387 -167 352 -104L132 -183C188 -331 351 -442 620 -442ZM622 222C448 222 355 358 355 564C355 767 446 918 622 918C794 918 887 776 887 564C887 350 792 222 622 222Z"/><path transform="translate(380.42 91) scale(0.03624 -0.03624)" d="M138 0H398V658C398 800 505 900 650 900C696 900 751 893 773 887V1126C748 1130 707 1133 678 1133C550 1133 442 1060 402 931H390V1118H138Z"/><path transform="translate(408.3 91) scale(0.03624 -0.03624)" d="M450 -23C624 -23 730 58 779 154H789V0H1038V747C1038 1045 792 1132 582 1132C358 1132 174 1037 108 840L349 791C376 865 453 932 583 932C710 932 778 868 778 759V754C778 677 696 674 502 653C286 630 76 566 76 314C76 94 237 -23 450 -23ZM517 170C407 170 328 220 328 317C328 419 416 462 533 478C600 487 745 505 780 533V401C780 277 677 170 517 170Z"/><path transform="translate(450.03 91) scale(0.03624 -0.03624)" d="M138 0H398V685C398 834 492 914 606 914C716 914 795 840 795 726V0H1049V702C1049 827 1126 914 1252 914C1359 914 1445 852 1445 714V0H1706V754C1706 1002 1552 1136 1351 1136C1194 1136 1054 1054 994 893C946 1052 851 1136 707 1136C574 1136 448 1064 390 905L382 1118H138Z"/></g>
+</svg>

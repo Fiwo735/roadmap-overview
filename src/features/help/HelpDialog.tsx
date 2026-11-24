@@ -65,7 +65,7 @@ export function HelpDialog() {
       open={open}
       onClose={close}
       title="Help"
-      description="Roadmap Overview sketches a campervan trip on a map: places, the route between them, and a picture to share."
+      description="Vanagram sketches a campervan trip on a map: places, the route between them, and a picture to share."
       size="lg"
       footer={
         <>

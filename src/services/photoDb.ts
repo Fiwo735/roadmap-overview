@@ -1,10 +1,10 @@
 import type { StoredPhotoMeta } from '../lib/photos'
 
 /**
- * Where the bytes of place photos live (F11): IndexedDB database "roadmap-overview", object store "photos",
- * one record per photo id. The trip itself only refers to ids (`Place.photos`), so photos never enter
- * the undo history, the autosave, the recent trips or a share link. A second store, "unreferenced", holds
- * the garbage collection's marks (when a photo was first found without a reference).
+ * Where the bytes of place photos live (F11): IndexedDB database "roadmap-overview" (the app's first name: renaming the
+ * database would lose every stored photo), object store "photos", one record per photo id. The trip itself only refers to
+ * ids (`Place.photos`), so photos never enter the undo history, the autosave, the recent trips or a share link. A second
+ * store, "unreferenced", holds the garbage collection's marks (when a photo was first found without a reference).
  */
 
 export const PHOTO_DB_NAME = 'roadmap-overview'

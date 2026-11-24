@@ -165,9 +165,9 @@ test.describe('save and open', () => {
 
     const cases: Array<[string, string, string]> = [
       ['notes.json', 'this is not json', 'This is not a trip file: it is not valid JSON.'],
-      ['other.json', JSON.stringify({ hello: 'world' }), 'This is not a Roadmap Overview trip file.'],
+      ['other.json', JSON.stringify({ hello: 'world' }), 'This is not a Vanagram trip file.'],
       ['empty.json', '', 'The file is empty.'],
-      ['future.json', JSON.stringify({ ...valid, version: 2 }), 'This trip was saved by a newer version of Roadmap Overview.'],
+      ['future.json', JSON.stringify({ ...valid, version: 2 }), 'This trip was saved by a newer version of Vanagram.'],
     ]
     for (const [name, content, reason] of cases) {
       const choosing = page.waitForEvent('filechooser')
@@ -420,7 +420,7 @@ test.describe('?src= loading', () => {
     )
     await openSrc(page, 'https://trips.example/page.json')
     await app.ready()
-    await expect(toasts(page)).toContainText('Could not open the trip from trips.example. This is not a Roadmap Overview trip file.')
+    await expect(toasts(page)).toContainText('Could not open the trip from trips.example. This is not a Vanagram trip file.')
 
     // What a server that does not allow cross-origin reads (or is unreachable) looks like to the page.
     await page.route('https://trips.example/private.json', (route) => route.abort('failed'))
@@ -482,6 +482,7 @@ test.describe('drag and drop', () => {
     await page.dispatchEvent('body', 'dragenter', { dataTransfer: dt })
     await expect(overlay).toBeVisible()
     await expect(overlay).toContainText('Drop to open trip')
+    await expect(overlay).toContainText('A Vanagram trip file (.json) replaces the current trip.')
     // Moving between elements raises more enter/leave pairs; the overlay stays.
     await page.dispatchEvent('.leaflet-container', 'dragenter', { dataTransfer: dt })
     await page.dispatchEvent('body', 'dragleave', { dataTransfer: dt })
@@ -523,7 +524,7 @@ test.describe('drag and drop', () => {
     const dt = await fileDrag(page, 'holiday.json', '{"hello": "world"}')
     await page.dispatchEvent('body', 'dragenter', { dataTransfer: dt })
     await page.dispatchEvent('body', 'drop', { dataTransfer: dt })
-    await expect(toasts(page)).toContainText('Could not open holiday.json. This is not a Roadmap Overview trip file.')
+    await expect(toasts(page)).toContainText('Could not open holiday.json. This is not a Vanagram trip file.')
 
     const other = await fileDrag(page, 'archive.zip', 'binary', 'application/zip')
     await page.dispatchEvent('body', 'drop', { dataTransfer: other })

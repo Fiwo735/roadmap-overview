@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { withSiteUrl } from './tools/sitePreview.ts'
 
 const FLAGS_DIR = fileURLToPath(new URL('./node_modules/flag-icons/flags/4x3/', import.meta.url))
 
@@ -42,8 +43,32 @@ function flagIcons(): Plugin {
   }
 }
 
+/**
+ * Link previews want an absolute image URL: with `VITE_SITE_URL` (the address the site is served at, e.g.
+ * `https://example.com/roadmap-overview`) the `og:image` and `twitter:image` of `index.html` get it, and `og:url` is added;
+ * without it they stay paths under the base. The deploy workflow passes GitHub Pages' `base_url` (README, "Deployment").
+ */
+function sitePreview(siteUrl: string | undefined): Plugin {
+  let base = BASE
+  return {
+    name: 'vanagram-site-preview',
+    // The base the build really uses: `vite build --base=…` overrides the config's.
+    configResolved(config) {
+      base = config.base
+    },
+    transformIndexHtml: {
+      // After Vite has put the base on the asset paths.
+      order: 'post',
+      handler(html) {
+        const { html: page, url } = withSiteUrl(html, siteUrl, base)
+        return { html: page, tags: url ? [{ tag: 'meta', attrs: { property: 'og:url', content: url }, injectTo: 'head' }] : [] }
+      },
+    },
+  }
+}
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: BASE,
-  plugins: [react(), flagIcons()],
-})
+  plugins: [react(), flagIcons(), sitePreview(loadEnv(mode, process.cwd(), 'VITE_').VITE_SITE_URL)],
+}))

@@ -2,19 +2,58 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Summarise a campervan trip on an OpenStreetMap map." />
-    <title>Roadmap Overview — campervan trip map</title>
+    <title>Vanagram — your campervan trip on one map</title>
+    <meta
+      name="description"
+      content="Your campervan trip on one OpenStreetMap map: places, route, trip statistics, a ride animation, and a picture or video to share. Runs in your browser."
+    />
+
+    <!-- Icons. The SVG (a 32 px design, and a pixel-grid 16 px one for tabs) comes last and says "any" size, so browsers that
+         draw SVG icons take it; the PNGs are for those that do not. Paths are Vite-rewritten under the app's base. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="Vanagram" />
+    <!-- The top bar's surface colour in each scheme (styles/tokens.css --surface). A theme picked in the app overrides both, see the script below. -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161d28" media="(prefers-color-scheme: dark)" />
+
+    <!-- Link previews. og:image / twitter:image become absolute when the build is given VITE_SITE_URL (see vite.config.ts). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vanagram" />
+    <meta property="og:title" content="Vanagram — your campervan trip on one map" />
+    <meta
+      property="og:description"
+      content="Places, the route between them, trip statistics and a ride animation on an OpenStreetMap map, as a picture or a video to share."
+    />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Vanagram: a campervan icon, the name and a dotted route with three numbered stops" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Vanagram — your campervan trip on one map" />
+    <meta
+      name="twitter:description"
+      content="Places, the route between them, trip statistics and a ride animation on an OpenStreetMap map, as a picture or a video to share."
+    />
+    <meta name="twitter:image" content="/og-image.png" />
     <script>
       // Apply the theme before first paint so there is no light flash in dark mode.
-      // Keep in sync with src/features/theme/theme.ts.
+      // Keep in sync with src/features/theme/theme.ts (the theme-color colours too).
       try {
-        var t = localStorage.getItem('roadmap-overview:theme')
-        if (t !== 'light' && t !== 'dark') {
-          t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-        }
+        var stored = localStorage.getItem('roadmap-overview:theme')
+        var chosen = stored === 'light' || stored === 'dark'
+        var t = chosen ? stored : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
         document.documentElement.dataset.theme = t
+        if (chosen) {
+          // A theme picked in the app tints the browser's bar in its own colour, whatever the OS scheme says.
+          var metas = document.querySelectorAll('meta[name="theme-color"]')
+          for (var i = 0; i < metas.length; i++) metas[i].setAttribute('content', t === 'dark' ? '#161d28' : '#ffffff')
+        }
       } catch (e) {
         document.documentElement.dataset.theme = 'light'
       }

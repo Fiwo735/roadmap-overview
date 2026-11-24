@@ -199,7 +199,7 @@ describe('openTripText', () => {
     expect(readRecentTrips()).toEqual([])
     expect(toasts().map((t) => [t.kind, t.message])).toEqual([
       ['error', 'Could not open bad.json. This is not a trip file: it is not valid JSON.'],
-      ['error', 'Could not open new.json. This trip was saved by a newer version of Roadmap Overview.'],
+      ['error', 'Could not open new.json. This trip was saved by a newer version of Vanagram.'],
     ])
   })
 

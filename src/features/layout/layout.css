@@ -40,16 +40,19 @@
   padding-right: var(--space-1);
 }
 
+/* Inter SemiBold with the lockup's tracking (docs/brand), so the live text and the logo read as one. */
 .brand__name {
   font-size: var(--text-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.012em;
   white-space: nowrap;
 }
 
+/* The tile's own corners (7/32 of its side) are in the picture; the shadow follows them. */
 .logo {
+  display: block;
   flex: none;
-  border-radius: 8px;
+  border-radius: 22%;
   box-shadow: var(--shadow-sm);
 }
 
@@ -83,10 +86,21 @@
   display: none;
 }
 
-/* The brand name makes room for the title and the buttons on narrower laptops and tablets. */
+/*
+ * The brand name makes room for the title and the buttons on narrower laptops and tablets. It is only taken out of sight, not out of the
+ * page (as .sr-only, global.css): the logo beside it is an image with no text of its own, so a screen reader still hears the app's name.
+ * Below 500px the whole brand goes (display: none, next rule), as before.
+ */
 @media (max-width: 1023px) {
   .brand__name {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    border: 0;
   }
 }
 
@@ -218,7 +232,6 @@
     display: inline-flex;
   }
 
-  .brand__name,
   .brand + .topbar__divider {
     display: none;
   }

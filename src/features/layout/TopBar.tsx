@@ -32,7 +32,7 @@ export function TopBar() {
       />
       <div className="brand">
         <Logo />
-        <span className="brand__name">Roadmap Overview</span>
+        <span className="brand__name">Vanagram</span>
       </div>
       <span className="topbar__divider" aria-hidden="true" />
       <TripTitle />

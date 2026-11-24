@@ -391,7 +391,7 @@ describe('parseTripFile limits', () => {
     const tooMany = { ...fileFor(sampleTrip()), trip: { id: 't', title: 'Huge', places: manyPlaces(501), legs: [] } }
     expect(parseTripFile(tooMany)).toEqual({
       ok: false,
-      error: 'This trip has 501 places; Roadmap Overview opens at most 500.',
+      error: 'This trip has 501 places; Vanagram opens at most 500.',
     })
   })
 

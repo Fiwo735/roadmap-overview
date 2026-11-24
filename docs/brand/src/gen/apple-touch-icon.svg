@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Vanagram (apple touch)">
+  <title>Vanagram (apple touch)</title>
+  <rect width="512" height="512" fill="#1a73e8"/>
+  <g transform="translate(45 128) scale(0.96)"><rect x="104" y="-14" width="78" height="22" rx="9" fill="#0d1219"/>
+    <path d="M0 160V24Q0 0 24 0H302Q324 0 332 19L359 92Q363 104 377 108L418 118Q440 124 440 142V160Z" fill="#0d1219"/>
+    <path d="M262 32H320L343 88H262Z" fill="#1a73e8" stroke="#1a73e8" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M256 36V150M178 36V150" stroke="#1a73e8" stroke-width="6" stroke-linecap="round"/>
+    <rect x="212" y="96" width="26" height="7" rx="3.5" fill="#ffffff"/>
+    <rect x="414" y="124" width="21" height="14" rx="6" fill="#f9ab00"/>
+    <circle cx="120" cy="164" r="49" fill="#1a73e8"/><circle cx="120" cy="164" r="38" fill="#0d1219"/><circle cx="120" cy="164" r="14" fill="#ffffff"/><circle cx="376" cy="164" r="49" fill="#1a73e8"/><circle cx="376" cy="164" r="38" fill="#0d1219"/><circle cx="376" cy="164" r="14" fill="#ffffff"/></g>
+  <g>
+    <circle cx="113.26" cy="367.74" r="9" fill="#ffffff"/><circle cx="149.78" cy="371.87" r="9" fill="#ffffff"/><circle cx="186.07" cy="377.87" r="9" fill="#ffffff"/><circle cx="222.72" cy="380.24" r="9" fill="#ffffff"/><circle cx="289.28" cy="367.76" r="9" fill="#ffffff"/><circle cx="325.27" cy="370.04" r="9" fill="#ffffff"/><circle cx="360.91" cy="375.91" r="9" fill="#ffffff"/><circle cx="396.75" cy="380.18" r="9" fill="#ffffff"/>
+    <circle cx="70" cy="374" r="23" fill="#ffffff"/>
+    <circle cx="256" cy="374" r="15" fill="#ffffff"/>
+    <circle cx="442" cy="374" r="26" fill="#ffffff"/>
+    <circle cx="442" cy="374" r="11" fill="#f9ab00"/>
+  </g>
+</svg>

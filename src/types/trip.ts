@@ -1,5 +1,5 @@
 /**
- * Data contract for Roadmap Overview.
+ * Data contract for Vanagram.
  *
  * Two kinds of data exist and must not be mixed:
  *
@@ -137,7 +137,10 @@ export interface LegRoute {
   spans?: RouteSpan[]
 }
 
-/** The on-disk / share format. A file opens instantly because routes travel with it. */
+/**
+ * The on-disk / share format. A file opens instantly because routes travel with it. `format` is a historic id from before the
+ * app was called Vanagram (it started as "Roadmap Overview"): it is written in every file and link already out there, so it never changes with the name.
+ */
 export interface TripFile {
   format: 'roadmap-overview/trip'
   version: 1

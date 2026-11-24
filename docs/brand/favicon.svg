@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Vanagram">
+  <title>Vanagram</title>
+  <style>.f16{display:none}@media (max-width:23.99px){.f32{display:none}.f16{display:inline}}</style>
+  <rect width="32" height="32" rx="7" fill="#1a73e8"/>
+  <g class="f32"><path d="M2 18V8Q2 6 4 6H20Q21.4 6 22 7.2L24 14H28Q30 14 30 16V18Z" fill="#0d1219"/>
+  <path d="M16 8H20.4L22 12H16Z" fill="#1a73e8"/>
+  <rect x="14" y="8" width="1" height="9" fill="#1a73e8"/>
+  <rect x="27" y="14.8" width="3" height="2" rx="0.6" fill="#f9ab00"/>
+  <circle cx="11" cy="19" r="5" fill="#1a73e8"/><circle cx="25" cy="19" r="5" fill="#1a73e8"/>
+  <circle cx="11" cy="19" r="3.5" fill="#0d1219"/><circle cx="25" cy="19" r="3.5" fill="#0d1219"/>
+  <circle cx="11" cy="19" r="1.2" fill="#ffffff"/><circle cx="25" cy="19" r="1.2" fill="#ffffff"/>
+  <g fill="#ffffff">
+    <circle cx="5" cy="28" r="2"/>
+    <circle cx="10" cy="28" r="1"/><circle cx="14" cy="28" r="1"/><circle cx="18" cy="28" r="1"/><circle cx="22" cy="28" r="1"/>
+    <circle cx="27" cy="28" r="2"/>
+  </g>
+  <circle cx="27" cy="28" r="1" fill="#f9ab00"/></g>
+  <g class="f16" transform="scale(2)"><path d="M1 3H10.5L12 7H15V9H1Z" fill="#0d1219"/>
+  <path d="M8 4H10.3L11.2 6H8Z" fill="#1a73e8"/>
+  <rect x="14" y="7" width="1" height="1" fill="#f9ab00"/>
+  <rect x="4" y="8" width="3" height="3" rx="1.1" fill="#0d1219"/><rect x="11" y="8" width="3" height="3" rx="1.1" fill="#0d1219"/>
+  <rect x="5" y="9" width="1" height="1" fill="#ffffff"/><rect x="12" y="9" width="1" height="1" fill="#ffffff"/>
+  <rect x="3" y="13" width="10" height="1" fill="#ffffff"/></g>
+</svg>

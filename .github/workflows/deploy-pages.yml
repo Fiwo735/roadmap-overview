@@ -31,13 +31,25 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-      # The site is served from /<repository>/, so every script, style, flag and sample file needs that base.
+      # GitHub Pages' own idea of the site's address: the owner's custom domain once there is one (the github.io address then
+      # redirects to it), with the repository's path. Link previews need an absolute image URL, so it goes to the build.
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      # The site is served from /<repository>/, so every script, style, flag, icon and sample file needs that base.
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_SITE_URL: ${{ steps.pages.outputs.base_url }}
 
       - name: Check the build carries the base path
         run: grep -q '/${{ github.event.repository.name }}/assets/' dist/index.html
+
+      # Only a warning: without GitHub Pages' address the build falls back to relative paths, which cost link previews, not the site.
+      - name: Check the link preview image has an absolute URL
+        run: |
+          grep -q '<meta property="og:image" content="https\?://' dist/index.html \
+            || echo "::warning title=Link preview::og:image is not an absolute URL (configure-pages gave no base_url); link previews will not show the picture."
 
       - uses: actions/upload-pages-artifact@v4
         with:

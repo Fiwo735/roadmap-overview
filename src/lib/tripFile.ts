@@ -8,6 +8,7 @@ import { areValidSpans } from './routeSpans'
 import { DEFAULT_TRIP_TITLE, defaultDayAt, isCalendarDate, isLegMode, normalizeDay, syncLegs } from './trip'
 import { parseVehicle } from './vehicles'
 
+/** A historic id (the app was first called Roadmap Overview): files and links already made carry it, so it stays. */
 export const TRIP_FILE_FORMAT = 'roadmap-overview/trip'
 export const TRIP_FILE_VERSION = 1
 
@@ -75,7 +76,7 @@ function parsePlaces(raw: unknown, warnings: string[]): Place[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) throw new FileError('"trip.places" must be a list.')
   if (raw.length > MAX_PLACES) {
-    throw new FileError(`This trip has ${raw.length} places; Roadmap Overview opens at most ${MAX_PLACES}.`)
+    throw new FileError(`This trip has ${raw.length} places; Vanagram opens at most ${MAX_PLACES}.`)
   }
   const places: Place[] = []
   const seen = new Set<string>()
@@ -299,14 +300,14 @@ function parsePhotos(raw: unknown, trip: Trip, warnings: string[]): Record<strin
  */
 export function parseTripFile(input: unknown): ParseTripFileResult {
   if (!isRecord(input) || input.format !== TRIP_FILE_FORMAT) {
-    return { ok: false, error: 'This is not a Roadmap Overview trip file.' }
+    return { ok: false, error: 'This is not a Vanagram trip file.' }
   }
   if (input.version !== TRIP_FILE_VERSION) {
     return {
       ok: false,
       error:
         typeof input.version === 'number' && input.version > TRIP_FILE_VERSION
-          ? 'This trip was saved by a newer version of Roadmap Overview.'
+          ? 'This trip was saved by a newer version of Vanagram.'
           : 'This trip file has an unsupported version.',
     }
   }

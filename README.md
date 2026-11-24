@@ -1,8 +1,15 @@
-# Roadmap Overview
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-lockup-dark.svg">
+    <img src="docs/brand/logo-lockup-light.svg" alt="Vanagram" height="72">
+  </picture>
+</h1>
+
+<p align="center"><strong>Your campervan trip on one map.</strong></p>
 
 ![A campervan trip from Hamburg to the Norwegian fjords: numbered stops, the road route, the title card with distance, driving time and countries](docs/screenshots/hero-light.png)
 
-**Roadmap Overview** is a browser app for summarising a campervan trip on an [OpenStreetMap](https://www.openstreetmap.org/) map. You
+**Vanagram** is a browser app for summarising a campervan trip on an [OpenStreetMap](https://www.openstreetmap.org/) map. You
 add the places you stop at, give each a day, and the app draws the route between them: roads you can reshape by dragging the line (like
 Google Maps), plus ferry, train and flight legs drawn by hand. A title card shows the distance, driving time, days and the countries you
 pass; a little vehicle can *ride* the route day by day; and the trip can be saved as a file, shared as a link, shown full-screen or
@@ -22,6 +29,7 @@ Try it with the bundled sample trip: **File → Load sample trip**.
 - [External services](#external-services)
 - [Hosting](#hosting)
 - [Deployment](#deployment)
+- [Name, logo and link previews](#name-logo-and-link-previews)
 
 ## Features
 
@@ -192,7 +200,7 @@ A trip is saved as a JSON file (`*.trip.json`). The format is the **data contrac
 
 ```jsonc
 {
-  "format": "roadmap-overview/trip",
+  "format": "roadmap-overview/trip",   // the app's first name, kept: see below
   "version": 1,
   "exportedAt": "2026-11-23T20:56:28.314Z",
   "trip": {
@@ -221,6 +229,9 @@ A trip is saved as a JSON file (`*.trip.json`). The format is the **data contrac
 - **Intent and derived data are kept apart.** `trip` is what you edit (places, legs, via points, days, notes). `routes` is an optional
   cache of the road geometry, keyed by leg id; the app only trusts a cached route whose `key` matches the trip, otherwise it routes the leg
   again. A file without `routes` opens fine and is routed on arrival.
+- **`format`** is `roadmap-overview/trip`, the name the app had before it was called Vanagram. It is written in every file and link made so
+  far, so it never changes with the name: a file from before the rename opens as it always did. (The same goes for the `roadmap-overview:…`
+  keys the browser storage and the `roadmap-overview` photo database use.)
 - **Days** are integers ≥ 0 on which a place is reached; they may be typed out of order (the app uses the running maximum).
 - **`vehicle`** (optional) is what the ride drives on roads: `kind` is one of `campervan` (the **Car** in the picker, and what a
   missing `vehicle` means), `iveco-daily` (the **Campervan** in the picker, black unless coloured), `retro-bus`, `motorhome`,
@@ -256,7 +267,7 @@ npm ci                  # install
 npm run dev             # dev server at http://localhost:5173 (npm run dev -- --port 5300 for another port)
 npm run typecheck       # tsc -b (app, tooling and tests)
 npm run lint            # oxlint
-npm test                # Vitest: the pure logic (src/**/*.test.ts)
+npm test                # Vitest: the pure logic (src/**/*.test.ts) and the build helpers (tools/**/*.test.ts)
 npm run e2e             # Playwright: the whole UI against mocked tile/routing/search servers (E2E_PORT=5300 to pick a port)
 npm run build           # type-check and build into dist/
 npm run preview         # serve dist/
@@ -290,7 +301,7 @@ does. Country boundaries and flags are bundled with the app. If you host a publi
 
 ## Hosting
 
-Roadmap Overview is a static site: `npm run build` writes everything to `dist/`, which any static file host can serve (no server code, no
+Vanagram is a static site: `npm run build` writes everything to `dist/`, which any static file host can serve (no server code, no
 client-side routes, so no fallback rules are needed). At the root of a domain nothing needs configuring.
 
 ### Under a sub-path (GitHub Pages)
@@ -314,9 +325,11 @@ start it by hand from the *Actions* tab: *Deploy to GitHub Pages → Run workflo
 
 1. installs the dependencies (`npm ci`, Node 22) and runs the type check, the linter and the unit tests (`npm test`; the Playwright
    suite is not run in CI);
-2. builds the app with `BASE_PATH=/<repository>/` (the repository name, so the site works under `…github.io/roadmap-overview/`) and checks
-   that the build carries that base;
-3. uploads `dist/` as the Pages artifact and deploys it with the official `actions/deploy-pages` action to the `github-pages` environment.
+2. asks GitHub Pages for the site's address (`actions/configure-pages`);
+3. builds the app with `BASE_PATH=/<repository>/` (the repository name, so the site works under `…github.io/roadmap-overview/`) and that
+   address as `VITE_SITE_URL` (the link preview needs it, see [Name, logo and link previews](#name-logo-and-link-previews)), then checks
+   that the build carries the base (and warns, without failing, when the link-preview image is not an absolute URL);
+4. uploads `dist/` as the Pages artifact and deploys it with the official `actions/deploy-pages` action to the `github-pages` environment.
 
 A failing check stops the deployment, so the live site is always a build that passed them. Other branches are ignored.
 
@@ -334,3 +347,28 @@ build as GitHub Pages will serve it:
 BASE_PATH=/roadmap-overview/ npm run build
 BASE_PATH=/roadmap-overview/ npx vite preview     # http://localhost:4173/roadmap-overview/
 ```
+
+## Name, logo and link previews
+
+The app is **Vanagram**; it started life as "Roadmap Overview", which is why the repository, the deploy path and a few internal ids still say
+`roadmap-overview` (the trip file's `format`, the `roadmap-overview:…` keys the browser storage uses, the `roadmap-overview` photo database
+and the `window.__ROADMAP__` debug hook): renaming those would orphan trips people already saved.
+
+- **The logo** is original artwork: a long-roof van on a blue tile, with a dotted route under it. The SVG sources, the generator that
+  makes every PNG and the usage notes (colours, sizes, the font licence) are in [`docs/brand/`](docs/brand/README.md). The top bar shows
+  `public/favicon.svg` as an image, the same file the browser tab uses: it holds two designs and picks the one that suits the size.
+- **Icons** (all in `public/`): `favicon.svg`, `favicon-16.png`, `favicon-32.png`, `apple-touch-icon.png` (iOS home screen), `icon-192.png`,
+  `icon-512.png` and `icon-maskable-512.png` (Android and installed apps), listed in `manifest.webmanifest` (name Vanagram, standalone,
+  theme colour `#1a73e8`) and wired up in `index.html`. Every URL in the manifest is relative, so they work under a sub-path.
+- **Link previews.** `index.html` carries Open Graph and Twitter card tags with `public/og-image.png` (1200 × 630). Link scrapers (chat apps,
+  social networks) want an **absolute** image URL, which only the deployment knows, so give the build the site's address:
+
+  ```sh
+  VITE_SITE_URL=https://example.com/roadmap-overview BASE_PATH=/roadmap-overview/ npm run build
+  ```
+
+  With it, `og:image` and `twitter:image` become `https://example.com/roadmap-overview/og-image.png` and `og:url` is added; without it
+  (a local build) they stay paths under the base, which is right for the page itself and wrong only for scrapers. The deploy workflow does
+  this by itself: it takes `base_url` from `actions/configure-pages`, which is the address GitHub Pages serves the site at, **the owner's custom
+  domain** once one is set (`https://fiwo735.github.io/roadmap-overview/` redirects to it), so the preview keeps working if the domain
+  changes. A value that is not an `http(s)` URL fails the build.

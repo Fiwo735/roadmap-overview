@@ -4,7 +4,7 @@ test.describe('app shell and map', () => {
   test('loads with the map, tiles, attribution and controls', async ({ page, app, mocks }) => {
     await app.goto()
 
-    await expect(page.getByRole('banner')).toContainText('Roadmap Overview')
+    await expect(page.getByRole('banner')).toContainText('Vanagram')
     await expect(page.getByTestId('trip-title')).toHaveValue('My campervan trip')
     await expect(page.getByTestId('sidebar')).toBeVisible()
     await expect(page.getByTestId('places-empty')).toBeVisible()

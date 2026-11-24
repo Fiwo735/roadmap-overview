@@ -1,12 +1,18 @@
-# Roadmap Overview — architecture
+# Vanagram — architecture
 
-A single-page web app for summarising a campervan trip: an OpenStreetMap map with numbered,
+Vanagram (called "Roadmap Overview" until F17) is a single-page web app for summarising a campervan trip: an OpenStreetMap map with numbered,
 labelled stops joined by the route actually taken (road-routed, reshapeable by dragging like
 Google Maps, plus hand-drawn ferry/train/flight legs), trip statistics, a "ride" animation of a
 little campervan driving the route day by day, JSON save/load/share, PNG export and a rendered video of the ride.
 
 Everything runs in the browser. There is no backend: OSM tiles, OSRM routing and Nominatim
 geocoding are called directly from the client.
+
+**Historic ids.** The rename (F17) changed what people read, not what the app stores or exchanges, so existing data keeps working: these
+still say `roadmap-overview` (or `__ROADMAP__`, `ro-`) and must not be changed to match the name — the trip file / share link format id
+`roadmap-overview/trip` (`TRIP_FILE_FORMAT`, `TripFile.format`), every `localStorage` key `roadmap-overview:*` (trip, theme, recent, corrupt,
+welcome, stats card, image and video options, vehicle), the IndexedDB database `roadmap-overview` (photos), the dev-only `window.__ROADMAP__`
+hook (and its `RoadmapDebug` type), the Leaflet pane names `ro-*`, the package name and the repository / deploy base path `/roadmap-overview/`.
 
 ## Stack
 
@@ -52,7 +58,7 @@ src/
   main.tsx, App.tsx          entry and layout (TopBar, Sidebar, map, toasts)
   bootstrap.ts               start-up: theme, restore autosave, start autosave, debug hook
   types/trip.ts              DATA CONTRACT (read this first)
-  types/debug.ts             typing of the dev-only window.__ROADMAP__ hook
+  types/debug.ts             typing of the dev-only window.__ROADMAP__ hook (a historic name, see above)
   lib/                       framework-free helpers — unit-tested with Vitest:
                              geo (haversine, bounds), polyline (encode/decode + memo), format,
                              id, trip (defaults, day rules, syncLegs), tripFile (parse/serialize),
@@ -79,7 +85,7 @@ src/
                              toast.ts), Spinner, SegmentedControl, Switch, useMediaQuery, portal.ts
                              (portal target, modal stack, the map's toast dock)
   features/<name>/           one folder per feature:
-    layout/                  TopBar (+ TopBarOverflow on phones), Sidebar, TripTitle, UndoRedoButtons, shortcuts, Logo
+    layout/                  TopBar (+ TopBarOverflow on phones), Sidebar, TripTitle, UndoRedoButtons, shortcuts, Logo (an <img> of public/favicon.svg; F17)
     map/                     MapView, panes, paneLock, mapInstance (getMap/useLeafletMap), view helpers,
                              BasemapLayer + SeaTileLayer (the OSM tiles, drawn on canvases; F9)
     theme/                   ThemeToggle, theme.ts (init/choose)
@@ -109,6 +115,10 @@ src/
   dev/                       UiKit page, served by the dev server at /ui-kit.html (not in the build)
   styles/                    tokens.css (theme variables), global.css
 e2e/                         Playwright specs, fixtures.ts (service mocks + helpers), mocks/
+tools/                       build-time helpers with Vitest tests: sitePreview (the absolute link-preview URLs from `VITE_SITE_URL`), brand.test (icons, manifest) (F17)
+public/                      static files served as they are: the icons, manifest.webmanifest, og-image.png (F17), the sample trip
+docs/brand/                  the logo's SVG masters and the generator of every icon PNG and the og-image, README with colours and licence (F17)
+docs/screenshots/            the README's pictures
 .github/workflows/           deploy-pages.yml: build and publish to GitHub Pages (F15)
 ```
 
@@ -247,7 +257,7 @@ Base URLs are constants in `src/services/config.ts` so they can be pointed elsew
 | --- | --- |
 | `npm run dev` | dev server (`-- --port N` to pick a port) |
 | `npm run typecheck` / `npm run lint` | `tsc -b` (app, node tooling, e2e) / oxlint |
-| `npm test` | Vitest unit tests (`src/**/*.test.ts`, node environment) |
+| `npm test` | Vitest unit tests (`src/**/*.test.ts` and `tools/**/*.test.ts`, node environment) |
 | `npm run e2e` | Playwright specs in `e2e/` (chromium; dev server on `E2E_PORT`, default 5199) |
 
 - e2e specs mock tiles, OSRM and Nominatim (`e2e/fixtures.ts`, `e2e/mocks/`), so they run offline
@@ -738,7 +748,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
   `bootstrap.ts`, `store/persistence.ts` (only `getStorage` is exported now), `PlacesPanel.tsx`
   (empty-state button), `Toast.css` (phones), `e2e/fixtures.ts` (`STORAGE_KEYS.recent`).
   **`parseTripFile` limits** (`lib/tripFile.ts`, they also apply to autosave and the recent trips): more
-  than `MAX_PLACES` = 500 places is refused ("This trip has 501 places; Roadmap Overview opens at most
+  than `MAX_PLACES` = 500 places is refused ("This trip has 501 places; Vanagram opens at most
   500."), via points beyond `MAX_VIA_PER_LEG` = 50 per leg are dropped with a warning, and a saved route
   whose `distanceM` is outside 0.5×–3× the length of its own geometry (a geometry that does not move may
   claim at most 1 km) is dropped with a warning and routed again. Test fixtures with routes therefore
@@ -1021,8 +1031,8 @@ Each feature appends a short entry here: what it added, where it lives, anything
   the base, flags loaded, sample, share and presentation links, `?src=`).
 - **README.md** (new): what it is, features with how-tos (the Image export section follows F7's dialog), shortcuts, the trip file format,
   sharing, development, the external services' policies and how to re-point them, hosting incl. an example GitHub Pages workflow (since F15 the README points to the real one). Screenshots live in `docs/screenshots/`
-  (made from the sample trip with real tiles at 1280×800 CSS px, device scale factor 2, then resized to 1600 px and reduced to a
-  256-colour palette to stay below 500 kB each); `exported-image.jpg` is a real export of the sample trip (Landscape 1920 × 1080,
+  (made from the sample trip with real tiles at 1280×800 CSS px, device scale factor 2, then resized to 1920 px (the video tab's, F13: 1600) and reduced to a
+  256-colour palette to stay below 500 kB each; F17 made them again); `exported-image.jpg` is a real export of the sample trip (Landscape 1920 × 1080,
   downscaled to 1440 × 810 — made from the merged app, so its card says "34 h 28 min").
 - **Small things**: the ride's legend is hidden below 1420 px (was 1260: at 1280 it sat under the controls); `TripCard`/`StartDate`
   render no prompts while editing is locked (also during a ride). **The title card folds into its pill while a ride runs** when the map
@@ -1375,7 +1385,7 @@ rules (the tile usage policy requires visible attribution as well).
   beginning while open), ferries keep the ferry, west facing, same size for all vehicles.
 - **Known gaps**: the vehicle pictures are drawn by hand and recognisable rather than exact (the Campervan is a generic long, high-roof
   van with its proportions, not a licensed likeness); the picker's previews are not animated; a vehicle other than the campervan is not shown in
-  the README screenshots; the remembered vehicle is per browser (not synced between devices), and re-clicking the checked vehicle also remembers it; the image export does not draw the vehicle (the video export, F13, does: it calls `drawTransport`).
+  the README screenshots (F17 redid them with the black Campervan); the remembered vehicle is per browser (not synced between devices), and re-clicking the checked vehicle also remembers it; the image export does not draw the vehicle (the video export, F13, does: it calls `drawTransport`).
 
 ### F15 — deployment to GitHub Pages
 
@@ -1383,12 +1393,13 @@ rules (the tile usage policy requires visible attribution as well).
   gated with `github.ref_name == github.event.repository.default_branch` (no branch name is hard-coded: a push to any other branch, or a
   manual run from one, skips both jobs). Permissions `contents: read`, `pages: write`, `id-token: write`. **build**: checkout, Node 22 with
   the npm cache, `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` (Vitest only), `npm run build` with
-  `BASE_PATH=/${{ github.event.repository.name }}/` (so a fork publishes under its own name), a one-line `grep` that `dist/index.html`
-  references `/<repo>/assets/` (fails the job if the base ever stops being applied), then `actions/upload-pages-artifact` with `dist`.
+  `BASE_PATH=/${{ github.event.repository.name }}/` (so a fork publishes under its own name; F17 put `actions/configure-pages` before it and passes its
+  `base_url` as `VITE_SITE_URL`), a one-line `grep` that `dist/index.html`
+  references `/<repo>/assets/` (fails the job if the base ever stops being applied; F17 added one that `og:image` is an absolute URL), then `actions/upload-pages-artifact` with `dist`.
   **deploy**: `needs: build`, `actions/deploy-pages` in the `github-pages` environment, `url` from the step's `page_url` output; the
   concurrency group `pages` (`cancel-in-progress: false`: a running deployment is never cancelled half-way, a newer one waits) is on
   *this job*, not the workflow, so a run whose build is skipped (a push to another branch) can never replace a queued default-branch deployment.
-  Actions used: `actions/checkout@v5`, `actions/setup-node@v5`, `actions/upload-pages-artifact@v4`, `actions/deploy-pages@v4`. They could
+  Actions used: `actions/checkout@v5`, `actions/setup-node@v5`, `actions/upload-pages-artifact@v4`, `actions/deploy-pages@v4` (F17: `actions/configure-pages@v5`). They could
   not be checked against github.com from the build machine; they are versions known to exist, so the first run is the real check
   (bumping a major later is a one-line change each).
 - **What the user must do once** (the workflow cannot): make the repository public (or use a plan with Pages for private repos) and set
@@ -1542,4 +1553,70 @@ The export dialog gained a **Video** tab; it renders the ride as an MP4 (or WebM
   server inside the page) and counts the halo pixels: black and navy glow by themselves, the white Car and a red van do not, `halo: true`
   / `false` force it, the long van is wider than the car and centred on the anchor in both directions.
 - **Known gaps**: the Car's picture is unchanged (the original small orange-striped high-top); the long van is still a generic van, not a
-  licensed likeness; the rear-quarter window and vent do not change with the colour or open; the README screenshots still show the Car.
+  licensed likeness; the rear-quarter window and vent do not change with the colour or open; the README screenshots still showed the Car (F17 redid them with the Campervan).
+
+### F17 — Vanagram: the new name and the logo
+
+The temporary name "Roadmap Overview" became **Vanagram**, with the long-roof van logo the user chose. A rename of what people see, not of what is
+stored: every historic id stays (the list is at the top of this file) so saved trips, links, photos and settings keep working.
+
+- **The name.** Every user-visible occurrence changed: the top bar, `index.html` (title "Vanagram — your campervan trip on one map", description), the Help
+  dialog's intro, the drop overlay's hint, the errors that name the app ("This is not a Vanagram trip file.", "This trip was saved by a newer version of
+  Vanagram.", "This trip has 501 places; Vanagram opens at most 500."), `ui-kit.html`, the README (new header) and this file. Presentation mode and the
+  empty states had no name in them. **Exported files carry no app name** (the PNG has a `Copyright` text chunk, the video a title and a comment: nothing
+  says Software), so nothing was added there. Kept on purpose, each with a comment where it is defined: `TripFile.format` / `TRIP_FILE_FORMAT`
+  `roadmap-overview/trip`, the `roadmap-overview:*` localStorage keys, the `roadmap-overview` IndexedDB database, `window.__ROADMAP__` (and `RoadmapDebug`),
+  the `ro-*` pane names, the Vite plugin name `roadmap-flag-icons`, `package.json`'s name, and the repository / base path. `e2e/brand.spec.ts` opens a
+  file in the historic format, restores an autosave from before the rename (the storage key), and writes back the historic format.
+- **The logo in the top bar** (`layout/Logo.tsx`): an **`<img>` of `favicon.svg`** at 32 px (was inline SVG in `--accent`). The favicon holds two designs and
+  switches with a media query *inside the SVG*, which only an image (or a tab) gives a viewport to; inline it would always show the big one. 32 px is also the
+  size the 32-unit design is drawn on, so it is crisp at 1× and 2×. Measured in Chromium: at 24 px and below the SVG draws the pixel-grid 16 px design, from about
+  24.5 px the detailed one. The brand name stays live text (Inter, weight 600 and the lockup's −0.012 em tracking to read as one with the mark); the phone rules
+  are unchanged (name hidden below 1024 px, the whole brand below 500 px). The image is decorative (`alt=""`).
+- **Files** (`public/`, made by the generator, see below): `favicon.svg` (replaced), `favicon-16.png`, `favicon-32.png`, `apple-touch-icon.png` (180, full square),
+  `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `og-image.png` (1200 × 630), and `manifest.webmanifest` (name and short name Vanagram, `display:
+  standalone`, `theme_color` `#1a73e8`, `background_color` `#eef1f5` = the light page background, icons 192 / 512 `any` and 512 `maskable`, **`start_url` and `scope`
+  `./` and icon `src`s relative**: they resolve against the manifest, so they follow it under any sub-path). `index.html` links the two PNG icons, then the SVG with
+  `sizes="any"` (last, so browsers that draw SVG icons take it), the apple-touch icon, the manifest, `apple-mobile-web-app-title`, and a `theme-color` per scheme
+  (`#ffffff` / `#161d28`, the top bar's `--surface`; once the user has picked a theme in the app both metas take *that* theme's colour, see "The address-bar colour" below), plus Open Graph (`og:type`, `site_name`, `title`,
+  `description`, `image` + type/size/alt) and Twitter (`summary_large_image`) tags. Vite rewrites every one of those paths under the base.
+- **Absolute link-preview URLs.** Scrapers want an absolute `og:image`; only the deployment knows the host. `tools/sitePreview.ts` (pure, unit-tested) and the
+  `sitePreview` plugin in `vite.config.ts` read **`VITE_SITE_URL`** (shell or `.env*`): with it, `og:image` and `twitter:image` become `<site>/og-image.png` and
+  `og:url` is added; without it they stay the base-relative path (right locally). A value that is not an http(s) URL fails the build; a trailing slash is optional
+  (`actions/configure-pages`' `base_url` has none). The plugin takes the base from `configResolved`, not from `BASE`: `vite build --base=…` overrides the config's
+  (the sub-path e2e build does exactly that, and caught the first version stripping the wrong prefix). **Workflow**: `actions/configure-pages@v5` (id `pages`) runs
+  after the typecheck / lint / unit-test gates and before the build, whose env gets `VITE_SITE_URL: ${{ steps.pages.outputs.base_url }}` next to `BASE_PATH`; so the
+  address is GitHub Pages' own — the owner's custom domain, not `*.github.io`, while it redirects — and nothing is hard-coded. A second step only **warns** (`::warning::`, exit 0) when
+  `og:image` is not `https?://…`: with no `base_url` the build falls back to relative paths, which costs link previews, not the site. The base-path grep, the gates and the default-branch-only `if` are unchanged. (Like the F15 actions, `configure-pages` and its
+  `base_url` output could not be run against github.com from the build machine; the first push is the check.)
+- **`docs/brand/`**: the SVG masters (`icon`, `icon-maskable`, `favicon`, the light and dark lockups), `preview-sheet.png`, a README (what each file is for, the colours
+  `#1a73e8` / `#0d1219` / white / `#f9ab00` and the ink colours, how to regenerate, the licence note) and `src/`, the designer's generator: `build.cjs` (SVGs),
+  `raster.cjs` (PNGs, Playwright), `compose.cjs` (og-image, preview sheet), `lib.cjs` (the artwork), `wordmark.py` + `wordmark-semibold.json` (Inter SemiBold outlines
+  from HarfBuzz / fontTools; redistributed under the OFL, so `docs/brand/LICENSE-Inter.txt` carries Inter's copyright line and the licence text, and the lockups and the JSON point to it). Changes from the delivered folder: the scripts are **`.cjs`** (this repository is `"type": "module"`), they write the PNGs and the favicon straight
+  into `public/` (no second copy to keep in step), and `wordmark.py` writes beside itself and takes `INTER_DIR`. Re-running all three reproduces the shipped files (the
+  SVGs byte for byte, the PNGs pixel for pixel). `tools/brand.test.ts` guards that `public/favicon.svg` equals the master, every icon the page and manifest name exists
+  at its declared size, and the favicon still holds both designs.
+- **README**: a `<picture>` header (the lockup, dark source for `prefers-color-scheme: dark`, 72 px tall so the lockup's own `min-height: 64px` picks the big mark),
+  the name throughout, a "Name, logo and link previews" section (how `VITE_SITE_URL` works and why), the deployment steps. **Screenshots** `hero-light`, `leg-editor`, `ride`,
+  `presentation`, `dark` (1280 × 800 at 2×, resized to 1920 px) and `video-export` (1280 × 960 at 2×, 1600 px) were made again from the sample trip with real tiles (the F8
+  disk cache of real OSM tiles: no tile was asked for again), the **Campervan chosen in the picker** (so the ride and the video frame show the black long van) and the
+  same 256-colour `MAXCOVERAGE` squeeze as before; 219 – 450 kB each. `exported-image.jpg` is unchanged: it shows neither the top bar nor a vehicle.
+- **Tests.** Vitest: `tools/sitePreview.test.ts` (no site URL, slash handling, query/fragment, invalid values refused, base stripping, domain-root and no-base builds),
+  `tools/brand.test.ts` (above), `features/theme/theme.test.ts` (`THEME_COLOR` against `tokens.css` and index.html); the error-message tests say Vanagram. Playwright: `e2e/brand.spec.ts` (title and banner, no "Roadmap Overview" in the page or the Help dialog,
+  live text in Inter, narrow-screen rules, the logo an `<img>` of `/favicon.svg` 32 px that loaded, **the SVG drawn at 16 / 32 px has the same pixels as `favicon-16/32.png`
+  and the 32 design shrunk to 16 is not the 16 design**, every icon link served with its type and size, the manifest parsing with its icons served and one maskable, the
+  Open Graph and Twitter tags and a served 1200 × 630 image, the theme colours (per OS scheme, following a theme picked in the app on a light and a dark OS, a stored choice applied by the page script alone), the name once in the banner's aria snapshot at every width where the logo shows, an old-format file, an old autosave and the sample opening), and `e2e/subpath.spec.ts`
+  (now two builds, with and without a site URL: icon links, manifest, manifest icons and start page under the base, the logo under the base, absolute `og:image` / `og:url` /
+  `twitter:image` and the file they name, the base-relative fallback). Also checked by hand with `BASE_PATH=/roadmap-overview/ npm run build` + `vite preview`: no request
+  outside the base, no console errors, the top bar in both themes at 1× and 2× and at 390 / 520 / 768 / 1100 px, the favicon in tab-sized renders.
+- **The address-bar colour follows the theme** (`features/theme/theme.ts`): `THEME_COLOR` (the two `--surface` values) and `syncThemeColor()`, called by `initTheme` and by
+  `chooseTheme` after it has stored the choice. With a stored choice **every** `meta[name=theme-color]` gets that theme's colour (a dark app on a light OS, or the reverse); with none each
+  keeps its own scheme's colour, i.e. what the OS says (the app has no "follow the system" action: a choice is permanent, so that is only the state before the first choice). index.html's
+  inline script does the same at first paint, with the same two hex values (`theme.test.ts` checks them against `tokens.css` and index.html).
+- **The name for screen readers.** The logo is an image with `alt=""`, so the name must be text wherever the logo shows: from 500 to 1023 px `.brand__name` is visually hidden
+  (the `.sr-only` pattern, in `layout.css`) instead of `display: none`; below 500 px the whole `.brand` is still `display: none`. `e2e/brand.spec.ts` reads the banner's aria snapshot at
+  1440, 1024, 1023, 800, 600 and 500 px (the name once) and at 499 px (not at all).
+- **Licence of the lettering.** The lockups' letters are outlines of Inter SemiBold, so `docs/brand/LICENSE-Inter.txt` has Inter's copyright line and the full SIL OFL 1.1 text; the
+  lockup SVGs (a comment) and `wordmark-semibold.json` (a `license` field) point to it. The unused `wordmark-bold.json` was removed and `wordmark.py` no longer makes it.
+- **Known gaps.** There is no service worker, so "installable" is up to the browser (the manifest only names and styles the app). The PNG icons are not regenerated by `npm run build` (run the generator when the artwork changes). Chromium decides which design the favicon
+  shows by the size it draws at; other browsers may take the PNGs listed before the SVG.

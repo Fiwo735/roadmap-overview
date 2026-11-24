@@ -87,7 +87,7 @@ export function DropOverlay() {
           <FileDown size={32} strokeWidth={1.75} />
         </span>
         <p className="drop-overlay__title">Drop to open trip</p>
-        <p className="drop-overlay__hint">A Roadmap Overview trip file (.json) replaces the current trip.</p>
+        <p className="drop-overlay__hint">A Vanagram trip file (.json) replaces the current trip.</p>
       </div>
     </div>,
     document.body,

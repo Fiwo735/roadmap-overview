@@ -108,10 +108,10 @@ describe('stringifyTripFile / parseTripJson', () => {
   })
 
   it('rejects JSON that is not a trip file', () => {
-    expect(parseTripJson('[]')).toEqual({ ok: false, error: 'This is not a Roadmap Overview trip file.' })
+    expect(parseTripJson('[]')).toEqual({ ok: false, error: 'This is not a Vanagram trip file.' })
     expect(parseTripJson('{"format":"something-else","version":1}')).toEqual({
       ok: false,
-      error: 'This is not a Roadmap Overview trip file.',
+      error: 'This is not a Vanagram trip file.',
     })
   })
 
@@ -119,7 +119,7 @@ describe('stringifyTripFile / parseTripJson', () => {
     const file = JSON.parse(stringifyTripFile(serializeTripFile(trip())))
     expect(parseTripJson(JSON.stringify({ ...file, version: 2 }))).toEqual({
       ok: false,
-      error: 'This trip was saved by a newer version of Roadmap Overview.',
+      error: 'This trip was saved by a newer version of Vanagram.',
     })
     expect(parseTripJson(JSON.stringify({ ...file, version: 0 }))).toEqual({
       ok: false,

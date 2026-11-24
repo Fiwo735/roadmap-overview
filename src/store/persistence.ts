@@ -3,6 +3,8 @@ import { collectLegRoutes, parseTripFile, serializeTripFile } from '../lib/tripF
 import { clearHistory, useTripStore } from './tripStore'
 import { useRouteStore } from './routeStore'
 
+// Every storage id (these, and the other `roadmap-overview:…` keys) keeps the app's first name: renaming one would orphan what
+// people already saved. Vanagram is only the name people see.
 export const CURRENT_TRIP_KEY = 'roadmap-overview:v1:current'
 /** Where unreadable saved data is copied before autosave overwrites it. */
 export const CORRUPT_TRIP_KEY = 'roadmap-overview:v1:corrupt'

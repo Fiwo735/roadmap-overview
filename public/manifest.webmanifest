@@ -1,0 +1,15 @@
+{
+  "name": "Vanagram",
+  "short_name": "Vanagram",
+  "description": "Your campervan trip on one map: places, the route, trip statistics, a ride animation, images and video.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#1a73e8",
+  "background_color": "#eef1f5",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
