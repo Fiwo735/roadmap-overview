@@ -12,8 +12,8 @@ geocoding are called directly from the client.
 still say `roadmap-overview` (or `__ROADMAP__`, `ro-`) and must not be changed to match the name — the trip file / share link format id
 `roadmap-overview/trip` (`TRIP_FILE_FORMAT`, `TripFile.format`), every `localStorage` key `roadmap-overview:*` (trip, theme, recent, corrupt,
 welcome, stats card, image and video options, vehicle), the IndexedDB database `roadmap-overview` (photos), the dev-only `window.__ROADMAP__`
-hook (and its `RoadmapDebug` type), the Leaflet pane names `ro-*` and the package name. The repository itself was renamed to `vanagram` after F17, so the deploy base
-path (the repository name) is now `/vanagram/`; the old `/roadmap-overview/` address no longer serves the app.
+hook (and its `RoadmapDebug` type), and the Leaflet pane names `ro-*`. The repository and the package were renamed to `vanagram` after F17, so the deploy base path
+(the repository name) is now `/vanagram/`; the old `/roadmap-overview/` address no longer serves the app.
 
 ## Stack
 
