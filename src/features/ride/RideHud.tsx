@@ -37,7 +37,7 @@ const LABELLED_TICKS = 14
 /** Position along the scrubber track for a fraction 0 … 1, allowing for the width of the thumb. */
 const along = (fraction: number) => `calc(var(--ride-thumb) / 2 + (100% - var(--ride-thumb)) * ${fraction})`
 
-/** Space and the arrow keys while a ride is on; ignored where they belong to something else (a field, a menu, a dialog, the speed buttons). */
+/** Space and the arrow keys while a ride is on; ignored where they belong to something else (a field, a menu, a dialog or a popover, the speed buttons). */
 function useRideKeys(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -45,7 +45,7 @@ function useRideKeys(): void {
       if (document.querySelector('dialog[open]')) return
       const target = e.target instanceof Element ? e.target : null
       const isRange = target instanceof HTMLInputElement && target.type === 'range'
-      if (target && ((isTextEntry(target) && !isRange) || target.closest('[role="menu"], [role="radiogroup"]'))) return
+      if (target && ((isTextEntry(target) && !isRange) || target.closest('[role="menu"], [role="radiogroup"], [role="dialog"]'))) return
 
       const handled = (action: () => void) => {
         e.preventDefault()

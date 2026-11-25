@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shortcutSections } from './shortcutList'
+import { isAnywhereShortcut, shortcutSections } from './shortcutList'
 
 describe('shortcutSections', () => {
   const sections = shortcutSections()
@@ -24,5 +24,30 @@ describe('shortcutSections', () => {
     expect(rows.some((r) => r.does === 'Redo' && r.keys.length === 2)).toBe(true)
     expect(rows.some((r) => /Save the trip/.test(r.does))).toBe(true)
     expect(rows.some((r) => /Open a trip file/.test(r.does))).toBe(true)
+  })
+})
+
+describe('isAnywhereShortcut', () => {
+  const press = (key: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean }> = {}) =>
+    isAnywhereShortcut({ key, ctrlKey: false, metaKey: false, altKey: false, ...mods })
+
+  it('is true for the keys of the "Anywhere" section that work with any focus', () => {
+    expect(press('?')).toBe(true)
+    expect(press('p')).toBe(true)
+    expect(press('P')).toBe(true)
+    for (const key of ['z', 'Z', 'y', 's', 'o']) {
+      expect(press(key, { ctrlKey: true }), key).toBe(true)
+      expect(press(key, { metaKey: true }), key).toBe(true)
+    }
+  })
+
+  it('is false for scrolling keys, other letters, other Ctrl combinations and Alt', () => {
+    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Tab', 'Escape', 'a', 'F11']) {
+      expect(press(key), key).toBe(false)
+    }
+    expect(press('c', { ctrlKey: true })).toBe(false)
+    expect(press('a', { metaKey: true })).toBe(false)
+    expect(press('p', { altKey: true })).toBe(false)
+    expect(press('z', { ctrlKey: true, altKey: true })).toBe(false)
   })
 })

@@ -1,9 +1,9 @@
-import { Fragment } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { useUiStore } from '../../store/uiStore'
 import { loadSampleTrip } from '../io/importTrip'
 import { useEditingLocked } from '../ride/rideStore'
+import { ShortcutTable } from './ShortcutTable'
 import { shortcutSections } from './shortcutList'
 import { HELP_DIALOG_ID } from './helpActions'
 import './help.css'
@@ -65,7 +65,7 @@ export function HelpDialog() {
       open={open}
       onClose={close}
       title="Help"
-      description="Vanagram sketches a campervan trip on a map: places, the route between them, and a picture to share."
+      description="Vanagram sketches a road trip on a map: places, the route between them, and a picture to share."
       size="lg"
       footer={
         <>
@@ -104,28 +104,7 @@ export function HelpDialog() {
             Keyboard shortcuts
           </h3>
           {shortcutSections().map((section) => (
-            <table key={section.id} className="help__keys" data-testid={`help-keys-${section.id}`}>
-              <caption>{section.title}</caption>
-              <tbody>
-                {section.entries.map((entry) => (
-                  <tr key={entry.does + entry.keys.join()}>
-                    <th scope="row">
-                      {entry.keys.map((combo, i) => (
-                        <Fragment key={combo.join('+')}>
-                          {i > 0 ? <span className="help__or"> or </span> : null}
-                          <span className="help__combo">
-                            {combo.map((key) => (
-                              <kbd key={key}>{key}</kbd>
-                            ))}
-                          </span>
-                        </Fragment>
-                      ))}
-                    </th>
-                    <td>{entry.does}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ShortcutTable key={section.id} section={section} testId={`help-keys-${section.id}`} />
           ))}
         </section>
       </div>

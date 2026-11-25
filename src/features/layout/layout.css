@@ -111,6 +111,13 @@
   }
 }
 
+/* Below 768px the title is already squeezed to a few letters: the keyboard button (Help has the same list) makes way for it. */
+@media (max-width: 767px) {
+  .shortcuts-button {
+    display: none;
+  }
+}
+
 /* Phones: undo/redo, presentation, help and theme live in the overflow menu (TopBarOverflow). */
 @media (max-width: 599px) {
   .topbar__collapsible {

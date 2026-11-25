@@ -306,7 +306,7 @@ test.describe('title, subtitle and dates', () => {
   test('editing the title on the card updates the top bar; one undo step restores it', async ({ page, app }) => {
     await openTrip(page, app, 'Lyon', 'Annecy')
     const title = page.getByTestId('card-title')
-    await expect(title).toHaveText('My campervan trip')
+    await expect(title).toHaveText('My road trip')
     const before = (await app.history()).past
 
     await title.click()
@@ -315,7 +315,7 @@ test.describe('title, subtitle and dates', () => {
     await input.fill('Alps')
     await input.pressSequentially(' in July')
     // Typing alone changes nothing in the trip: one history entry per edit.
-    expect((await app.trip()).title).toBe('My campervan trip')
+    expect((await app.trip()).title).toBe('My road trip')
     await input.press('Enter')
 
     await expect(title).toHaveText('Alps in July')
@@ -325,8 +325,8 @@ test.describe('title, subtitle and dates', () => {
     expect((await app.history()).past).toBe(before + 1)
 
     await page.keyboard.press('Control+z')
-    await expect(title).toHaveText('My campervan trip')
-    await expect(topBarTitle(page)).toHaveValue('My campervan trip')
+    await expect(title).toHaveText('My road trip')
+    await expect(topBarTitle(page)).toHaveValue('My road trip')
     await page.keyboard.press('Control+Shift+z')
     await expect(title).toHaveText('Alps in July')
   })
@@ -584,7 +584,7 @@ test.describe('collapsing the card', () => {
     await page.getByTestId('card-collapse').click()
     await expect(card(page)).toHaveCount(0)
     await expect(pill(page)).toBeVisible()
-    await expect(pill(page)).toContainText('My campervan trip')
+    await expect(pill(page)).toContainText('My road trip')
     await expect(pill(page)).toHaveAttribute('aria-expanded', 'false')
     expect((await pill(page).boundingBox())!.height).toBeLessThan(44)
 

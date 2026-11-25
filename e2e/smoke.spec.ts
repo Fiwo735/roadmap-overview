@@ -5,7 +5,7 @@ test.describe('app shell and map', () => {
     await app.goto()
 
     await expect(page.getByRole('banner')).toContainText('Vanagram')
-    await expect(page.getByTestId('trip-title')).toHaveValue('My campervan trip')
+    await expect(page.getByTestId('trip-title')).toHaveValue('My road trip')
     await expect(page.getByTestId('sidebar')).toBeVisible()
     await expect(page.getByTestId('places-empty')).toBeVisible()
 
@@ -104,7 +104,7 @@ test.describe('trip title, undo and redo', () => {
     await title.click()
     await title.fill('Norway 2026')
     // Typing alone does not touch the store.
-    expect((await app.trip()).title).toBe('My campervan trip')
+    expect((await app.trip()).title).toBe('My road trip')
     await title.press('Enter')
 
     expect((await app.trip()).title).toBe('Norway 2026')
@@ -112,7 +112,7 @@ test.describe('trip title, undo and redo', () => {
     await expect(undo).toBeEnabled()
 
     await undo.click()
-    await expect(title).toHaveValue('My campervan trip')
+    await expect(title).toHaveValue('My road trip')
     await expect(undo).toBeDisabled()
     await expect(redo).toBeEnabled()
 
@@ -127,7 +127,7 @@ test.describe('trip title, undo and redo', () => {
     await title.click()
     await title.fill('Never mind')
     await title.press('Escape')
-    await expect(title).toHaveValue('My campervan trip')
+    await expect(title).toHaveValue('My road trip')
     expect(await app.history()).toEqual({ past: 0, future: 0 })
   })
 
@@ -234,7 +234,7 @@ test.describe('autosave', () => {
   test('corrupt saved data does not crash the app', async ({ page, app }) => {
     await app.seedRawStorage('roadmap-overview:v1:current', '{"format": "nope"')
     await app.goto()
-    await expect(page.getByTestId('trip-title')).toHaveValue('My campervan trip')
+    await expect(page.getByTestId('trip-title')).toHaveValue('My road trip')
     await expect(page.getByTestId('toast')).toContainText('could not be restored')
     expect(await page.evaluate(() => localStorage.getItem('roadmap-overview:v1:corrupt'))).toBe('{"format": "nope"')
   })

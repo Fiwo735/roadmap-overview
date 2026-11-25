@@ -97,8 +97,89 @@
   text-align: center;
 }
 
+/* ---- The keyboard popover (top bar): the same rows, closer together --------------------------- */
+
+.shortcuts-pop {
+  position: fixed;
+  z-index: var(--z-menu);
+  width: min(800px, calc(100vw - 16px));
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  animation: shortcuts-pop-in 120ms var(--ease);
+}
+
+.shortcuts-pop:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+@keyframes shortcuts-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.shortcuts-pop__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.shortcuts-pop__title {
+  font-size: var(--text-base);
+  font-weight: 650;
+}
+
+.shortcuts-pop__hint {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+/* Sections flow into two columns where the popover is wide enough, one where it is not. */
+.shortcuts-pop__sections {
+  columns: 2 320px;
+  column-gap: var(--space-5);
+}
+
+.shortcuts-pop__sections .help__keys {
+  break-inside: avoid;
+  margin-bottom: var(--space-3);
+}
+
+.help__keys--compact {
+  font-size: var(--text-xs);
+}
+
+.help__keys--compact th,
+.help__keys--compact td {
+  padding: 3px var(--space-2) 3px 0;
+  line-height: 1.35;
+}
+
+/* The keys take what they need (alternatives wrap under each other), the rest is for the words. */
+.help__keys--compact th {
+  width: 1%;
+  min-width: 112px;
+  white-space: normal;
+}
+
+.help__keys--compact kbd {
+  min-width: 20px;
+  padding: 0 5px;
+  line-height: 1.45;
+}
+
 @media (max-width: 599px) {
-  .help__keys th {
+  .help__keys:not(.help__keys--compact) th {
     width: 44%;
     white-space: normal;
   }

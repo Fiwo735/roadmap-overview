@@ -4,6 +4,7 @@ import { useUiStore } from '../../store/uiStore'
 import { ExportImageButton } from '../export-image/ExportImageButton'
 import { HelpButton } from '../help/HelpButton'
 import { HelpDialog } from '../help/HelpDialog'
+import { ShortcutsButton } from '../help/ShortcutsButton'
 import { FileMenu } from '../io/FileMenu'
 import { PresentationButton } from '../presentation/PresentationButton'
 import { RideButton } from '../ride/RideButton'
@@ -48,6 +49,7 @@ export function TopBar() {
         <div className="topbar__collapsible">
           <span className="topbar__divider" aria-hidden="true" />
           <PresentationButton />
+          <ShortcutsButton />
           <HelpButton />
           <ThemeToggle />
         </div>

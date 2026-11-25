@@ -4,7 +4,7 @@ import { newId } from './id'
 import { MODE_ORDER } from './modes'
 import { cleanPhotoList } from './photos'
 
-export const DEFAULT_TRIP_TITLE = 'My campervan trip'
+export const DEFAULT_TRIP_TITLE = 'My road trip'
 
 export function isLegMode(value: unknown): value is LegMode {
   return typeof value === 'string' && (MODE_ORDER as readonly string[]).includes(value)

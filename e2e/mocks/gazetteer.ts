@@ -1,5 +1,5 @@
 /**
- * Small gazetteer of places a European campervan trip might use. It backs the Nominatim mock and
+ * Small gazetteer of places a European road trip might use. It backs the Nominatim mock and
  * lets specs add places by name without typing in the UI.
  * Coordinates are real (city-centre level), rounded to 4 decimals.
  */

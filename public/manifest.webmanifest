@@ -1,7 +1,7 @@
 {
   "name": "Vanagram",
   "short_name": "Vanagram",
-  "description": "Your campervan trip on one map: places, the route, trip statistics, a ride animation, images and video.",
+  "description": "Your road trip on one map: places, the route, trip statistics, a ride animation, images and video.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

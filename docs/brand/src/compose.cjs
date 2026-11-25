@@ -37,7 +37,7 @@ function ogHtml() {
   <svg class="deco" viewBox="0 0 1200 630" width="1200" height="630">${dots}${nodes}
     <circle cx="1150" cy="110" r="31" fill="#fff" stroke="#1a73e8" stroke-width="10"/><circle cx="1150" cy="110" r="11" fill="#f9ab00"/></svg>
   <img class="lock" src="${u('logo-lockup-light.svg')}">
-  <div class="tag">Your campervan trip on one map</div>`
+  <div class="tag">Your road trip on one map</div>`
 }
 
 function sheetHtml() {

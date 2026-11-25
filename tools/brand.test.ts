@@ -18,7 +18,7 @@ const attr = (tag: string, name: string) => new RegExp(`\\s${name}="([^"]*)"`).e
 
 describe('index.html', () => {
   it('is Vanagram', () => {
-    expect(html).toContain('<title>Vanagram — your campervan trip on one map</title>')
+    expect(html).toContain('<title>Vanagram — your road trip on one map</title>')
     expect(html).not.toMatch(/roadmap overview/i)
     expect(html).toMatch(/<meta property="og:site_name" content="Vanagram"/)
     expect(html).toMatch(/<meta name="twitter:card" content="summary_large_image"/)

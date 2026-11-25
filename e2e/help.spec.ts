@@ -51,7 +51,7 @@ test.describe('help dialog', () => {
     await app.goto()
     await page.keyboard.press('?')
     const general = page.getByTestId('help-keys-general')
-    for (const does of ['Open this help', 'Presentation mode on or off', 'Undo', 'Redo', 'Save the trip as a JSON file', 'Open a trip file']) {
+    for (const does of ['Open the help', 'Presentation mode on or off', 'Undo', 'Redo', 'Save the trip as a JSON file', 'Open a trip file']) {
       await expect(general.getByRole('cell', { name: does })).toBeVisible()
     }
     await expect(page.getByTestId('help-keys-places')).toBeVisible()

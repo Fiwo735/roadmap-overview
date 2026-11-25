@@ -225,7 +225,7 @@ test.describe('the same trip in two tabs', () => {
       await changed(page2).getByRole('button', { name: 'Load it' }).click()
 
       const dialog = page2.getByRole('dialog', { name: 'Replace the open trip?' })
-      await expect(dialog).toContainText('no room to keep a copy of “My campervan trip”')
+      await expect(dialog).toContainText('no room to keep a copy of “My road trip”')
       await expect(dialog).toContainText('the other tab’s trip')
       await dialog.getByRole('button', { name: 'Cancel' }).click()
       await expect(dialog).toBeHidden()

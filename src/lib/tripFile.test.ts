@@ -242,6 +242,13 @@ describe('parseTripFile normalisation', () => {
     expect(res.file.trip.title).toBe('')
   })
 
+  it('names a trip without a title "My road trip", and keeps the title an older trip was saved with', () => {
+    const untitled = fileFor(sampleTrip())
+    delete untitled.trip.title
+    expect(ok(untitled).file.trip.title).toBe('My road trip')
+    expect(ok(fileFor({ ...sampleTrip(), title: 'My campervan trip' })).file.trip.title).toBe('My campervan trip')
+  })
+
   it('ignores an invalid startDate and non-string subtitle', () => {
     const file = fileFor(sampleTrip())
     file.trip.startDate = '2026-02-30'

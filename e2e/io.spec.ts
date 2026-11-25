@@ -209,7 +209,7 @@ test.describe('new trip', () => {
     await expect(page.getByTestId('places-empty')).toBeVisible()
     const fresh = await app.trip()
     expect(fresh.places).toEqual([])
-    expect(fresh.title).toBe('My campervan trip')
+    expect(fresh.title).toBe('My road trip')
     expect(fresh.id).not.toBe(before.id)
     expect(await app.history()).toEqual({ past: history.past + 1, future: 0 })
 
@@ -255,7 +255,7 @@ test.describe('share links', () => {
     await app.ready()
 
     expect(await app.trip()).toEqual(trip)
-    await expect(toasts(page)).toContainText('Opened “My campervan trip” (3 places).')
+    await expect(toasts(page)).toContainText('Opened “My road trip” (3 places).')
     // The hash is gone, so a reload does not import it again ...
     expect(new URL(page.url()).hash).toBe('')
     // ... and the routes are computed (they were not in the link).
@@ -456,7 +456,7 @@ test.describe('?src= loading', () => {
     await offer.getByRole('button', { name: 'Open linked trip' }).click()
     await expect.poll(async () => (await app.trip()).title).toBe('From a gist')
     // What the user had been editing is in the recent trips.
-    expect(await recentTitles(page)).toEqual(['My campervan trip'])
+    expect(await recentTitles(page)).toEqual(['My road trip'])
   })
 })
 
@@ -711,7 +711,7 @@ test.describe('when the recent trips cannot be stored', () => {
 
     await open()
     const dialog = page.getByRole('dialog', { name: 'Replace the open trip?' })
-    await expect(dialog).toContainText('no room to keep a copy of “My campervan trip”')
+    await expect(dialog).toContainText('no room to keep a copy of “My road trip”')
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await expect(dialog).toBeHidden()

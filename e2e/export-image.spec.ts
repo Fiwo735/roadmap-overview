@@ -132,7 +132,8 @@ test.describe('export image', () => {
     await page.keyboard.press('Escape')
     await expect(dialog(page)).toHaveCount(0)
     await expect(button(page)).toBeFocused()
-    expect((await app.ui()).openDialogId).toBeNull()
+    // The browser hides a <dialog> and returns the focus at once, but its close event (which tells the store) is a task later.
+    await expect.poll(async () => (await app.ui()).openDialogId).toBeNull()
 
     // The close button does the same.
     await openDialog(page)

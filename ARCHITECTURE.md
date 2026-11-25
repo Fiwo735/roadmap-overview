@@ -1,9 +1,9 @@
 # Vanagram — architecture
 
-Vanagram (called "Roadmap Overview" until F17) is a single-page web app for summarising a campervan trip: an OpenStreetMap map with numbered,
+Vanagram (called "Roadmap Overview" until F17) is a single-page web app for summarising a road trip (a car, a van, a motorbike: the campervan is one of the vehicles): an OpenStreetMap map with numbered,
 labelled stops joined by the route actually taken (road-routed, reshapeable by dragging like
 Google Maps, plus hand-drawn ferry/train/flight legs), trip statistics, a "ride" animation of a
-little campervan driving the route day by day, JSON save/load/share, PNG export and a rendered video of the ride.
+little vehicle driving the route day by day, JSON save/load/share, PNG export and a rendered video of the ride.
 
 Everything runs in the browser. There is no backend: OSM tiles, OSRM routing and Nominatim
 geocoding are called directly from the client.
@@ -34,7 +34,7 @@ hook (and its `RoadmapDebug` type), and the Leaflet pane names `ro-*`. The repos
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ TopBar: logo · trip title · undo/redo · Ride · Image · File · present · help · theme │
+│ TopBar: logo · trip title · undo/redo · Ride · Image · File · present · keys · help · theme │
 ├───────────────┬──────────────────────────────────────────────────────────┤
 │ Sidebar       │ Map                                                      │
 │  Places list  │  ┌ title + stats card (top-left)     map tools (top-right)┐│
@@ -46,7 +46,8 @@ hook (and its `RoadmapDebug` type), and the Leaflet pane names `ro-*`. The repos
 ```
 
 Below 600 px the top bar folds undo/redo, presentation mode, help and the theme into a "⋯" menu
-(`layout/TopBarOverflow`); in presentation mode (F8) the sidebar and the editing buttons are gone and the
+(`layout/TopBarOverflow`); the keyboard button (F18) goes already below 768 px (the title needs the room) and is not rendered at all on
+touch-only devices; in presentation mode (F8) the sidebar and the editing buttons are gone and the
 map takes the whole width.
 
 The light/dark theme applies to everything **except the map tiles**, which always use the
@@ -107,8 +108,9 @@ src/
     export-video/            video export (F13): VideoPanel (the Video tab, lazy chunk), the scene (`scene.ts`: layout, one background picture,
                              a crop and vector overlays per frame), schedule (the video's clock), camera (still / following), hud (day panel),
                              encoding (what this browser can encode), frameSink (VideoEncoder + mediabunny, or MediaRecorder), renderRideVideo
-    help/                    HelpDialog (how-tos + the shortcut table in `shortcutList.ts`), HelpButton, `?` key
-                             (`helpActions`), WelcomeHint (first-visit card, `welcomeStore`) (F8)
+    help/                    HelpDialog (how-tos + the shortcut tables, one `ShortcutTable` per section of `shortcutList.ts`), HelpButton, `?` key
+                             (`helpActions`), WelcomeHint (first-visit card, `welcomeStore`) (F8); ShortcutsButton (the top bar's keyboard
+                             button and its hover popover, same `ShortcutTable`s) (F18)
     presentation/            presentationStore, PresentationButton (+ `usePresentationKeys`), PresentationLayer (F8)
     photos/                  photos of places (F11): PlacePhotos (the expanded row's Photos area), addPhotos + processImage
                              (decode, shrink, store), photoActions, MapPlaceCard (the card over a clicked marker) and
@@ -119,7 +121,7 @@ e2e/                         Playwright specs, fixtures.ts (service mocks + help
 tools/                       build-time helpers with Vitest tests: sitePreview (the absolute link-preview URLs from `VITE_SITE_URL`), brand.test (icons, manifest) (F17)
 public/                      static files served as they are: the icons, manifest.webmanifest, og-image.png (F17), the sample trip
 docs/brand/                  the logo's SVG masters and the generator of every icon PNG and the og-image, README with colours and licence (F17)
-docs/screenshots/            the README's pictures
+docs/screenshots/            the README's pictures, all in the dark theme: hero, leg-editor, ride, presentation, video-export (PNG) and exported-image.jpg (F18)
 .github/workflows/           deploy-pages.yml: build and publish to GitHub Pages (F15)
 ```
 
@@ -1033,7 +1035,7 @@ Each feature appends a short entry here: what it added, where it lives, anything
 - **README.md** (new): what it is, features with how-tos (the Image export section follows F7's dialog), shortcuts, the trip file format,
   sharing, development, the external services' policies and how to re-point them, hosting incl. an example GitHub Pages workflow (since F15 the README points to the real one). Screenshots live in `docs/screenshots/`
   (made from the sample trip with real tiles at 1280×800 CSS px, device scale factor 2, then resized to 1920 px (the video tab's, F13: 1600) and reduced to a
-  256-colour palette to stay below 500 kB each; F17 made them again); `exported-image.jpg` is a real export of the sample trip (Landscape 1920 × 1080,
+  256-colour palette to stay below 500 kB each; F17 made them again, F18 in the dark theme with other file names); `exported-image.jpg` is a real export of the sample trip (Landscape 1920 × 1080,
   downscaled to 1440 × 810 — made from the merged app, so its card says "34 h 28 min").
 - **Small things**: the ride's legend is hidden below 1420 px (was 1260: at 1280 it sat under the controls); `TripCard`/`StartDate`
   render no prompts while editing is locked (also during a ride). **The title card folds into its pill while a ride runs** when the map
@@ -1598,7 +1600,7 @@ stored: every historic id stays (the list is at the top of this file) so saved t
   SVGs byte for byte, the PNGs pixel for pixel). `tools/brand.test.ts` guards that `public/favicon.svg` equals the master, every icon the page and manifest name exists
   at its declared size, and the favicon still holds both designs.
 - **README**: a `<picture>` header (the lockup, dark source for `prefers-color-scheme: dark`, 72 px tall so the lockup's own `min-height: 64px` picks the big mark),
-  the name throughout, a "Name, logo and link previews" section (how `VITE_SITE_URL` works and why), the deployment steps. **Screenshots** `hero-light`, `leg-editor`, `ride`,
+  the name throughout, a "Name, logo and link previews" section (how `VITE_SITE_URL` works and why), the deployment steps. **Screenshots** (F18 redid them in the dark theme: `hero-light` became `hero`, `dark` was dropped) `hero-light`, `leg-editor`, `ride`,
   `presentation`, `dark` (1280 × 800 at 2×, resized to 1920 px) and `video-export` (1280 × 960 at 2×, 1600 px) were made again from the sample trip with real tiles (the F8
   disk cache of real OSM tiles: no tile was asked for again), the **Campervan chosen in the picker** (so the ride and the video frame show the black long van) and the
   same 256-colour `MAXCOVERAGE` squeeze as before; 219 – 450 kB each. `exported-image.jpg` is unchanged: it shows neither the top bar nor a vehicle.
@@ -1621,3 +1623,79 @@ stored: every historic id stays (the list is at the top of this file) so saved t
   lockup SVGs (a comment) and `wordmark-semibold.json` (a `license` field) point to it. The unused `wordmark-bold.json` was removed and `wordmark.py` no longer makes it.
 - **Known gaps.** There is no service worker, so "installable" is up to the browser (the manifest only names and styles the app). The PNG icons are not regenerated by `npm run build` (run the generator when the artwork changes). Chromium decides which design the favicon
   shows by the size it draws at; other browsers may take the PNGs listed before the SVG.
+
+### F18 — road-trip wording, a product README with dark screenshots, shortcuts in the app
+
+Three owner requests in one change: the app talks about a **road trip**, not just a campervan trip; the README describes the finished product
+(with dark screenshots and the new live address) instead of how it was built and hosted; and the keyboard shortcuts, taken out of the README,
+are one hover away in the app.
+
+- **Wording.** Vanagram is for any road trip, the campervan being one vehicle among six. Every user-visible "campervan trip" is now "road trip":
+  `DEFAULT_TRIP_TITLE` ("My road trip"; saved trips keep their own titles, `tripFile.test.ts` checks an older "My campervan trip" survives), the Help
+  dialog's intro, `index.html` (title "Vanagram — your road trip on one map", description, the og/twitter titles, `og:image:alt` which now describes
+  the icon as a van on a blue tile), `manifest.webmanifest`, the og-image tagline ("Your road trip on one map", `docs/brand/src/compose.cjs`) and the
+  intro of this file. `public/og-image.png` and `docs/brand/preview-sheet.png` were regenerated with `node docs/brand/src/compose.cjs` alone (not
+  `build.cjs` / `raster.cjs`, which write the icons): pixel diff against the old files is the tagline's rows only, nothing else under `public/` or
+  `docs/brand/` moved. Kept on purpose: the vehicle called "Campervan", the kind id `campervan` (the Car), the sample trip's note "Pick up the van…"
+  (the sample is a van trip, and its vehicle is the Campervan), and the historic Feature-log entries.
+- **The keyboard button** (`help/ShortcutsButton.tsx`, CSS in `help.css`; the button is an `IconButton`, no new shared component). It sits in the
+  top bar's collapsible group **right before Help** (so presentation mode, which keeps Help, keeps it too, and the phone layout folds it away with
+  Help). Its popover lists `shortcutSections()` through **`help/ShortcutTable.tsx`**, the component the Help dialog now draws its tables with
+  as well: the rows are one list, one markup (`help__keys`, a `--compact` modifier for the popover), no copy. Behaviour:
+  - **Hover** opens it after 300 ms of rest (a quick pass does not), it stays open while the pointer is on the button or the popover (a 200 ms grace
+    lets the pointer cross the 6 px gap) and closes when it leaves both. A **click**, or Enter/Space on the focused button, opens it **pinned**:
+    it stays open when the pointer leaves, and **moves the focus into the popover** (`role="dialog"`, `tabIndex 0`, so a keyboard scrolls it); a click on
+    the button while a hover-opened popover shows pins it (a click is a choice, not a toggle off), a click on a pinned one closes it.
+  - **Esc** closes it wherever the focus is and gives the focus back to the button when it was on the button or inside the popover; **Tab** inside
+    it closes it and puts the focus on the button; a pointer press elsewhere, a resize, a scroll of anything but the popover, and a dialog opening
+    (`?` while it is open) close it. Esc is a **window capture** listener registered once when the top bar mounts, i.e. before the ride's keys
+    (`useRideKeys`, also capture, registered when a ride starts) and before presentation mode's: while the popover is open the key is its own
+    (`preventDefault` + `stopPropagation`), so Esc does not also close a ride or leave presentation mode. `RideHud`'s key filter gained `[role="dialog"]`
+    next to `[role="menu"]` / `[role="radiogroup"]`, so Space and the arrows a keyboard user presses in the pinned popover do not drive the ride.
+  - **Keys that work anywhere** (`?`, `P`, Ctrl/⌘ + Z, Y, S, O; `isAnywhereShortcut` in `shortcutList.ts`, unit-tested) pressed with the focus inside the popover are *not*
+    swallowed: the popover's own `keydown` handler (which runs before the window's) closes it and puts the focus on the button, and the key goes on to its handler (a
+    presentation toggle, an undo, a download, the Help dialog). The focus move matters for `?`: a modal dialog gives the focus back to what had it when it opened, which
+    would be the popover that is gone (the focus then fell to `<body>`); with the button holding it the Help returns it there. A layout effect on "a dialog opened" does the same
+    for any other way a dialog opens with the focus inside the popover. Scrolling keys (arrows, PageUp/PageDown, Home/End, Space) and any other key leave it open; a hover-opened
+    popover with the focus elsewhere is no trap either: Tab moves on and the popover stays until the pointer leaves or Esc.
+  - **Tooltip**: "Keyboard shortcuts" (the accessible name too). While the popover is open the tooltip is switched off (`tooltip=""`; it would sit on
+    the popover), and hovering opens the popover sooner (300 ms) than the tooltip would show (450 ms), so the tooltip is what a keyboard user sees
+    on focus; hovering shows the popover, titled the same.
+  - **Where it is offered**: hidden below **768 px** (`layout.css`: at 600–767 px the trip title was already squeezed to ~70 px, a 36 px button more would
+    leave it unreadable; phones, below 600 px, also have it in the collapsible group that the "⋯" menu replaces) and **not rendered at all** on a touch-only
+    device (`useMediaQuery('(hover: none), (pointer: coarse)')`; Playwright's `hasTouch: true` matches it). Those users have Help (`?` button, or
+    "Help and shortcuts" in the "⋯" menu), which has the same list.
+  - Layout: `position: fixed` under the button, its right edge on the button's, clamped to the window; `max-height` is the room below it, `overflow-y: auto`,
+    `overscroll-behavior: contain`; up to 800 px wide in two CSS columns (`columns: 2 320px`, sections kept whole), 706 px tall at 1440 × 900 (so it scrolls
+    on windows shorter than ≈ 760 px). Colours are the tokens (`--surface`, `--border`, `--shadow-lg`, the `.kbd` keys), light and dark.
+- **README** rewritten as a product page: the lockup header, the tagline "Your road trip on one map.", the live address
+  **https://filipwojcicki.com/vanagram/** (bold, centred, under the tagline) and a short intro, then Features (with the screenshots), Sharing, The trip file,
+  Privacy, Data sources and credits, Development. Removed: the Contents list, the Keyboard shortcuts table (one sentence in "Help and keyboard shortcuts"
+  points to the keyboard button / `?`), Hosting, Under a sub-path, Deployment and Name, logo and link previews, and every other sentence about deploying
+  or building for hosting (no build or preview command in Development either). No build history (F-numbers, "done in …") remains. The trip file section is
+  a short user-facing reference (a trimmed example, what a file holds, photos, `format: roadmap-overview/trip` kept for compatibility in one sentence,
+  days, vehicle, versioning, forgiving opening). Credits name OpenStreetMap (ODbL, tile policy), OSRM, Nominatim and the libraries whose licences ask for
+  a mention (Leaflet BSD-2, React-Leaflet Hippocratic-2.1, Mediabunny MPL-2.0, Inter OFL with its licence file, world-atlas / Natural Earth, flag-icons,
+  Lucide). The policy table was shortened but keeps what matters to the three services (rates, caching, attribution). The README's links are all relative (images,
+  ARCHITECTURE.md, source files) except the clone URL `https://github.com/Fiwo735/vanagram.git` and the live site, so nothing depends on the repository's name;
+  the old name appears only in the file-format id. The deploy workflow and its comments were not touched.
+- **Screenshots** (`docs/screenshots/`), all **dark**: `hero.png` (was `hero-light.png`), `leg-editor.png`, `ride.png` (the black Campervan), `presentation.png`,
+  `video-export.png`; `dark.png` was deleted (the hero is dark now) and `hero-light.png` with it. Made as in F8 / F13 / F17: the sample trip, real tiles (read from
+  F17's disk cache of real OSM tiles: no tile was fetched for this change), 1280 × 800 CSS px at 2× (the video tab 1280 × 960 with the dialog's height cap lifted),
+  resized to 1920 px (video tab 1600 px) and reduced to 256 colours (`Image.quantize(256, MAXCOVERAGE)`, no dither): 225 – 456 kB each. `exported-image.jpg` is the app's
+  own export (Landscape 1920 × 1080 at 1×, **card style Dark**, credit "Small, in the image" so the picture carries its attribution wherever the README is shown),
+  scaled to 1440 × 810, JPEG quality 86 progressive, 212 kB. The top bar in them now shows the keyboard button.
+- **Tests.** Playwright `e2e/shortcuts.spec.ts` (new, 24 tests): button beside Help with its name, `aria-*` and tooltip on keyboard focus; hover opens after a rest and
+  leaving closes, a quick pass does not open, the pointer can move onto the popover; **its rows equal `shortcutSections()`** (read from the page through the dev server's
+  module, `import('/src/features/help/shortcutList.ts')`) **and the Help dialog's rows**; click pins it and Esc returns the focus to the button; Enter and Space; Tab, an outside click
+  and `?` close it; hover then click keeps it; Esc on a hovered one; presentation mode (Esc closes the popover, then the second leaves the mode); a ride (Esc closes the popover first, with
+  the focus inside or with a hover while the ride's keys are older than it; Space and ↓ in it do not drive the ride); a 420 px high window (it scrolls, End reaches the last row);
+  768 px wide; the focus after `?` and Esc / Done on the Help; `P`, Ctrl+Z, Ctrl+Shift+Z, Ctrl+S and Ctrl+O from inside it (it closes, the key acts, the focus is on the button); the
+  scrolling keys keeping it open; hover-open then Tab; light and dark (colours compared with the theme tokens read from the page, a screenshot attached to the report); absent at 390 px and below 768 px, present at 768 px, **absent (count 0)
+  with `hasTouch`**. Existing specs: the strings `My road trip`, the title, description and Open Graph texts and the Help intro (`brand`, `smoke`, `io`, `stats`, `crossTab`).
+  Vitest: `tripFile.test.ts` (the default title and an older saved one), `shortcutList.test.ts` (`isAnywhereShortcut`); `tools/readme.test.ts` (new: every README picture is a relative link to a file that exists and is
+  under 500 kB, `docs/screenshots/` holds nothing the README does not show, the header order lockup → tagline → live site → intro, no hosting / deployment / contents / shortcut-table
+  headings and no build history such as "(F13)" or "done in F8", the old repository name only as the file format id, no "campervan trip" in the README, the page and the manifest).
+- **Shared list wording.** The first row of `shortcutSections()` now reads "Open the help" (was "Open this help"), which fits both the dialog and the popover.
+- **Known gaps.** The popover shows the same long descriptions as the Help dialog, so it is wide; there is no search or "copy". The tooltip is not seen on hover (the popover
+  takes over). A hybrid laptop whose primary pointer is a touchscreen (`hover: none`) gets no keyboard button. The README screenshots are still static and will age with the UI.

@@ -28,9 +28,9 @@ const attr = (page: Page, selector: string, name: string) => page.locator(select
 test.describe('the name', () => {
   test('the document, the top bar and the description say Vanagram, and nothing says Roadmap Overview', async ({ page, app }) => {
     await app.goto()
-    await expect(page).toHaveTitle('Vanagram — your campervan trip on one map')
+    await expect(page).toHaveTitle('Vanagram — your road trip on one map')
     await expect(page.getByRole('banner')).toContainText('Vanagram')
-    expect(await attr(page, 'meta[name="description"]', 'content')).toMatch(/campervan trip/)
+    expect(await attr(page, 'meta[name="description"]', 'content')).toMatch(/road trip/)
     expect(await page.locator('head').innerHTML()).not.toMatch(/roadmap overview/i)
     expect((await page.locator('body').innerText()).toLowerCase()).not.toContain('roadmap overview')
   })
@@ -39,7 +39,7 @@ test.describe('the name', () => {
     await app.goto()
     await page.getByTestId('help-button').click()
     await expect(page.getByTestId('help-dialog')).toBeVisible()
-    await expect(page.getByRole('dialog')).toContainText('Vanagram sketches a campervan trip')
+    await expect(page.getByRole('dialog')).toContainText('Vanagram sketches a road trip')
     expect(await page.getByRole('dialog').innerText()).not.toMatch(/roadmap overview/i)
   })
 
@@ -175,12 +175,12 @@ test.describe('icons, manifest and link preview', () => {
 
   test('the link preview has a title, a description, a card type and a served 1200 × 630 picture', async ({ page, app }) => {
     await app.goto()
-    expect(await attr(page, 'meta[property="og:title"]', 'content')).toBe('Vanagram — your campervan trip on one map')
+    expect(await attr(page, 'meta[property="og:title"]', 'content')).toBe('Vanagram — your road trip on one map')
     expect(await attr(page, 'meta[property="og:type"]', 'content')).toBe('website')
     expect(await attr(page, 'meta[property="og:site_name"]', 'content')).toBe('Vanagram')
     expect(await attr(page, 'meta[property="og:description"]', 'content')).toBeTruthy()
     expect(await attr(page, 'meta[name="twitter:card"]', 'content')).toBe('summary_large_image')
-    expect(await attr(page, 'meta[name="twitter:title"]', 'content')).toBe('Vanagram — your campervan trip on one map')
+    expect(await attr(page, 'meta[name="twitter:title"]', 'content')).toBe('Vanagram — your road trip on one map')
 
     // No VITE_SITE_URL in the dev server: a path (the absolute form is in subpath.spec.ts).
     const image = await attr(page, 'meta[property="og:image"]', 'content')

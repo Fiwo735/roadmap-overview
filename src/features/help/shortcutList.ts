@@ -26,7 +26,7 @@ export function shortcutSections(): ShortcutSection[] {
       id: 'general',
       title: 'Anywhere',
       entries: [
-        { keys: [['?']], does: 'Open this help' },
+        { keys: [['?']], does: 'Open the help' },
         { keys: [['P']], does: 'Presentation mode on or off' },
         { keys: [keys('Z')], does: 'Undo' },
         { keys: [keys('Z', true), keys('Y')], does: 'Redo' },
@@ -81,4 +81,15 @@ export function shortcutSections(): ShortcutSection[] {
       ],
     },
   ]
+}
+
+/**
+ * Is this key press one of the "Anywhere" shortcuts that act whatever has the focus: `?`, `P`, and Ctrl/⌘ with Z, Y, S or O?
+ * (Esc is the other, but every popup and editor claims it for itself first.) The keyboard popover uses it to make way for them.
+ */
+export function isAnywhereShortcut(e: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean }): boolean {
+  if (e.altKey) return false
+  const key = e.key.toLowerCase()
+  if (e.ctrlKey || e.metaKey) return ['z', 'y', 's', 'o'].includes(key)
+  return key === '?' || key === 'p'
 }
